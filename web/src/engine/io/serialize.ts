@@ -2,6 +2,7 @@ import { MODES, type Mode } from '../../protocol'
 import type { DocObject, Document } from '../doc/document'
 import { MIGRATIONS, SCHEMA_VERSION, type Migration, type RawDocument } from '../doc/schema'
 import { CommandError } from '../errors'
+import { parseTree, type SdfTree } from '../organic/tree'
 
 const APP_ID = 'organic-machines'
 
@@ -65,9 +66,23 @@ function validate(raw: RawDocument): Document {
       throw new CommandError(`This file is damaged: object ${index + 1} is invalid`)
     }
     seen.add(item.id)
-    return { id: item.id, name: item.name, mode: item.mode }
+    const object: DocObject = { id: item.id, name: item.name, mode: item.mode }
+    if (item.sdf === undefined) return object
+    if (item.mode !== 'organic') {
+      throw new CommandError(`This file is damaged: object ${index + 1} is invalid`)
+    }
+    return { ...object, sdf: readShape(item.sdf, index) }
   })
   return { schemaVersion: SCHEMA_VERSION, units, nextId, objects: parsed }
+}
+
+function readShape(raw: unknown, index: number): SdfTree {
+  try {
+    return parseTree(raw)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'its shape is invalid'
+    throw new CommandError(`This file is damaged: in object ${index + 1}, ${detail}`)
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

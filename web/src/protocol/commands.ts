@@ -1,4 +1,4 @@
-import { MODES, VIEWS, type Mode, type ViewName } from './types'
+import { DEMO_SCENES, MODES, VIEWS, type DemoScene, type Mode, type ViewName } from './types'
 
 type NoParams = Record<never, never>
 
@@ -15,6 +15,10 @@ export interface CommandParams {
   'view.home': NoParams
   'view.set': { view: ViewName }
   'view.flip': NoParams
+  'demo.scene': { name: DemoScene }
+  'organic.set': { id: string; node: string; param: string; value: number }
+  'bench.run': NoParams
+  'selftest.sdf': NoParams
 }
 
 export type CommandName = keyof CommandParams
@@ -27,6 +31,7 @@ export type CommandResult = { ok: true } | { ok: false; error: string }
 
 export type ParamSpec =
   | { type: 'string'; optional?: boolean }
+  | { type: 'number'; optional?: boolean }
   | { type: 'enum'; values: readonly string[]; optional?: boolean }
 
 export interface CommandSpec {
@@ -76,6 +81,23 @@ export const COMMAND_SPECS: {
     positional: ['view'],
   },
   'view.flip': { summary: 'Look from the opposite side', params: {} },
+  'demo.scene': {
+    summary: 'Replace the document with a built-in Organic scene',
+    params: { name: { type: 'enum', values: DEMO_SCENES } },
+    positional: ['name'],
+  },
+  'organic.set': {
+    summary: 'Change one number of an Organic shape, e.g. node=n3 param=radius or param=position.x',
+    params: {
+      id: { type: 'string' },
+      node: { type: 'string' },
+      param: { type: 'string' },
+      value: { type: 'number' },
+    },
+    positional: ['id', 'node', 'param', 'value'],
+  },
+  'bench.run': { summary: 'Measure frame time while orbiting the current scene', params: {} },
+  'selftest.sdf': { summary: 'Check the SDF shader against the conformance vectors', params: {} },
 }
 
 export function isCommandName(name: string): name is CommandName {

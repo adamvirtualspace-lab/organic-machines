@@ -7,6 +7,7 @@ import {
   type EngineStats,
   type EventMap,
   type EventName,
+  type LogMessage,
   type Mode,
   type QueryMap,
   type ViewName,
@@ -15,13 +16,21 @@ import { emptyDocument, type DocObject, type Document } from './doc/document'
 import { History } from './doc/history'
 import { CommandError } from './errors'
 import { deserializeDocument, serializeDocument } from './io/serialize'
+import { demoScene } from './organic/demos'
+import { setTreeParam } from './organic/tree'
+
+type ViewStats = Omit<EngineStats, 'jsHeapBytes' | 'wasmHeapBytes'>
 
 /** What the viewport contributes when one is attached. Absent in the headless CLI. */
 export interface ViewDelegate {
   home(): void
   setView(view: ViewName): void
   flipView(): void
-  stats(): Pick<EngineStats, 'frameMs' | 'gpuBytesEstimate'>
+  /** Called once on attach and then after every change to the document. */
+  documentChanged(doc: Document): void
+  bench(): Promise<readonly LogMessage[]>
+  selfTest(): Promise<readonly LogMessage[]>
+  stats(): ViewStats
 }
 
 export interface Engine extends EngineApi {
@@ -30,6 +39,13 @@ export interface Engine extends EngineApi {
 }
 
 const MODE_LABEL: Record<Mode, string> = { organic: 'Organic', machines: 'Machines' }
+const NO_VIEW_STATS: ViewStats = {
+  frameMs: null,
+  gpuBytesEstimate: null,
+  sdfScale: null,
+  shaderBuilds: null,
+  shaderBuildMs: null,
+}
 
 /** Creates the engine core. It has no DOM or rendering dependency, so it also runs in Node. */
 export function createEngine(): Engine {
@@ -39,6 +55,7 @@ export function createEngine(): Engine {
   const history = new History<Document>()
   const listeners: { [K in EventName]: Set<(payload: EventMap[K]) => void> } = {
     'state.changed': new Set(),
+    log: new Set(),
   }
 
   const snapshot = (): EngineState => ({
@@ -59,6 +76,10 @@ export function createEngine(): Engine {
     return view
   }
 
+  function report(messages: readonly LogMessage[]): void {
+    for (const message of messages) for (const listener of listeners.log) listener(message)
+  }
+
   /** Finds an object, refusing ones that belong to the other mode. */
   function editable(id: string): DocObject {
     const object = doc.objects.find((o) => o.id === id)
@@ -71,8 +92,13 @@ export function createEngine(): Engine {
     return object
   }
 
+  const replace = (target: DocObject, next: DocObject): Document => ({
+    ...doc,
+    objects: doc.objects.map((o) => (o === target ? next : o)),
+  })
+
   // Handlers throw CommandError before changing anything, so a failed command changes nothing.
-  const handlers: { [K in CommandName]: (params: CommandParams[K]) => void } = {
+  const handlers: { [K in CommandName]: (params: CommandParams[K]) => void | Promise<void> } = {
     'mode.set': ({ mode: next }) => {
       if (!MODES.includes(next)) throw new CommandError(`Unknown mode "${String(next)}"`)
       mode = next
@@ -92,10 +118,7 @@ export function createEngine(): Engine {
     'object.rename': ({ id, name }) => {
       const target = editable(id)
       if (!name.trim()) throw new CommandError('A name cannot be empty')
-      change({
-        ...doc,
-        objects: doc.objects.map((o) => (o === target ? { ...o, name: name.trim() } : o)),
-      })
+      change(replace(target, { ...target, name: name.trim() }))
     },
     'doc.new': () => {
       doc = emptyDocument()
@@ -118,14 +141,27 @@ export function createEngine(): Engine {
     'view.home': () => viewport().home(),
     'view.set': ({ view: name }) => viewport().setView(name),
     'view.flip': () => viewport().flipView(),
+    'demo.scene': ({ name }) => {
+      const objects = demoScene(name).map((object, index): DocObject => ({
+        id: `o${index + 1}`,
+        mode: 'organic',
+        ...object,
+      }))
+      change({ ...doc, nextId: objects.length + 1, objects })
+    },
+    'organic.set': ({ id, node, param, value }) => {
+      const target = editable(id)
+      if (!target.sdf) throw new CommandError(`"${target.name}" has no shape to edit`)
+      change(replace(target, { ...target, sdf: setTreeParam(target.sdf, node, param, value) }))
+    },
+    'bench.run': async () => report(await viewport().bench()),
+    'selftest.sdf': async () => report(await viewport().selfTest()),
   }
 
   const queries: { [K in keyof QueryMap]: () => QueryMap[K] } = {
     state: () => state,
     stats: () => ({
-      frameMs: null,
-      gpuBytesEstimate: null,
-      ...view?.stats(),
+      ...(view?.stats() ?? NO_VIEW_STATS),
       jsHeapBytes: jsHeapBytes(),
       wasmHeapBytes: 0, // No WASM modules are loaded until the OCCT worker arrives in M1.
     }),
@@ -137,13 +173,15 @@ export function createEngine(): Engine {
       if (!Object.hasOwn(handlers, command.name)) {
         return { ok: false, error: `Unknown command "${String(command.name)}"` }
       }
-      const handler = handlers[command.name] as (params: unknown) => void
+      const handler = handlers[command.name] as (params: unknown) => void | Promise<void>
+      const before = doc
       try {
-        handler(command.params)
+        await handler(command.params)
       } catch (error) {
         if (error instanceof CommandError) return { ok: false, error: error.message }
         throw error
       }
+      if (doc !== before) view?.documentChanged(doc)
       state = snapshot()
       for (const listener of listeners['state.changed']) listener(state)
       return { ok: true }
@@ -155,6 +193,7 @@ export function createEngine(): Engine {
     },
     attachView(delegate) {
       view = delegate
+      delegate.documentChanged(doc)
       return () => {
         if (view === delegate) view = null
       }

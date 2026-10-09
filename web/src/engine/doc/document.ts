@@ -1,10 +1,13 @@
 import type { Mode } from '../../protocol'
+import type { SdfTree } from '../organic/tree'
 import { SCHEMA_VERSION } from './schema'
 
 export interface DocObject {
   readonly id: string
   readonly name: string
   readonly mode: Mode
+  /** An Organic object's shape. Absent on Machines objects and on empty Organic ones. */
+  readonly sdf?: SdfTree
 }
 
 /**

@@ -1,0 +1,225 @@
+{
+  "about": "Points and expected signed distances for every SDF node type, worked out by hand. Each point is [x, y, z, distance]. The CPU evaluator and the shader must both match these.",
+  "cases": [
+    {
+      "name": "sphere",
+      "trees": [{ "id": "a", "kind": "sphere", "position": [0, 0, 0], "radius": 10 }],
+      "points": [[0, 0, 0, -10], [20, 0, 0, 10], [0, 0, 13, 3], [3, 4, 0, -5]]
+    },
+    {
+      "name": "box",
+      "trees": [{ "id": "a", "kind": "box", "position": [0, 0, 0], "size": [20, 10, 6] }],
+      "points": [[0, 0, 0, -3], [15, 0, 0, 5], [13, 9, 0, 5], [0, 0, 10, 7]]
+    },
+    {
+      "name": "roundBox",
+      "trees": [{ "id": "a", "kind": "roundBox", "position": [0, 0, 0], "size": [20, 20, 20], "radius": 4 }],
+      "points": [[20, 0, 0, 10], [0, 0, 0, -10], [9, 10, 0, 1], [10, 0, 0, 0]]
+    },
+    {
+      "name": "cylinder",
+      "trees": [{ "id": "a", "kind": "cylinder", "position": [0, 0, 0], "radius": 5, "height": 10 }],
+      "points": [[0, 0, 0, -5], [8, 0, 0, 3], [0, 0, 9, 4], [8, 0, 9, 5], [0, 8, -9, 5]]
+    },
+    {
+      "name": "capsule",
+      "trees": [{ "id": "a", "kind": "capsule", "position": [0, 0, 0], "radius": 3, "height": 16 }],
+      "points": [[0, 0, 0, -3], [7, 0, 0, 4], [0, 0, 10, 2], [4, 0, 8, 2], [0, 0, -8, 0]]
+    },
+    {
+      "name": "torus",
+      "trees": [{ "id": "a", "kind": "torus", "position": [0, 0, 0], "major": 10, "minor": 2 }],
+      "points": [[10, 0, 0, -2], [0, 0, 0, 8], [10, 0, 5, 3], [13, 0, 4, 3], [0, -13, -4, 3]]
+    },
+    {
+      "name": "cone",
+      "trees": [{ "id": "a", "kind": "cone", "position": [0, 0, 0], "radius": 6, "height": 8 }],
+      "points": [[0, 0, -10, 6], [0, 0, 9, 5], [0, 0, 0, -2.4], [11, 0, -4, 5], [0, 0, 4, 0]]
+    },
+    {
+      "name": "plane",
+      "trees": [{ "id": "a", "kind": "plane", "position": [0, 0, 10] }],
+      "points": [[0, 0, 15, 5], [7, 7, 4, -6], [-50, 20, 10, 0]]
+    },
+    {
+      "name": "translate",
+      "trees": [{ "id": "a", "kind": "sphere", "position": [5, -2, 3], "radius": 10 }],
+      "points": [[5, -2, 3, -10], [25, -2, 3, 10], [5, -2, -12, 5]]
+    },
+    {
+      "name": "rotate about Z",
+      "trees": [{ "id": "a", "kind": "box", "position": [0, 0, 0], "rotation": [0, 0, 90], "size": [20, 10, 6] }],
+      "points": [[0, 15, 0, 5], [9, 0, 0, 4], [0, 0, 5, 2]]
+    },
+    {
+      "name": "rotate about X then Z",
+      "trees": [{ "id": "a", "kind": "box", "position": [0, 0, 0], "rotation": [90, 0, 90], "size": [20, 10, 6] }],
+      "points": [[0, 15, 0, 5], [0, 0, 9, 4], [8, 0, 0, 5]]
+    },
+    {
+      "name": "scale",
+      "trees": [
+        { "id": "a", "kind": "sphere", "position": [0, 0, 0], "scale": 2, "radius": 10 },
+        { "id": "b", "kind": "box", "position": [100, 0, 0], "scale": 5, "size": [2, 2, 2] }
+      ],
+      "points": [[30, 0, 0, 10], [0, 0, 0, -20], [108, 0, 0, 3], [100, 0, 0, -5]]
+    },
+    {
+      "name": "mirror",
+      "trees": [
+        {
+          "id": "m",
+          "kind": "mirror",
+          "position": [0, 0, 0],
+          "axis": "x",
+          "child": { "id": "a", "kind": "sphere", "position": [10, 0, 0], "radius": 3 }
+        }
+      ],
+      "points": [[-10, 0, 0, -3], [-15, 0, 0, 2], [0, 0, 0, 7], [10, 0, 0, -3]]
+    },
+    {
+      "name": "union",
+      "trees": [
+        {
+          "id": "u",
+          "kind": "union",
+          "position": [0, 0, 0],
+          "blend": 0,
+          "children": [
+            { "id": "a", "kind": "sphere", "position": [-10, 0, 0], "radius": 5 },
+            { "id": "b", "kind": "sphere", "position": [10, 0, 0], "radius": 5 }
+          ]
+        }
+      ],
+      "points": [[0, 0, 0, 5], [10, 0, 0, -5], [-17, 0, 0, 2]]
+    },
+    {
+      "name": "subtract",
+      "trees": [
+        {
+          "id": "s",
+          "kind": "subtract",
+          "position": [0, 0, 0],
+          "blend": 0,
+          "children": [
+            { "id": "a", "kind": "box", "position": [0, 0, 0], "size": [20, 20, 20] },
+            { "id": "b", "kind": "sphere", "position": [10, 0, 0], "radius": 5 }
+          ]
+        }
+      ],
+      "points": [[0, 0, 0, -5], [8, 0, 0, 3], [20, 0, 0, 10]]
+    },
+    {
+      "name": "intersect",
+      "trees": [
+        {
+          "id": "i",
+          "kind": "intersect",
+          "position": [0, 0, 0],
+          "blend": 0,
+          "children": [
+            { "id": "a", "kind": "sphere", "position": [0, 0, 0], "radius": 10 },
+            { "id": "b", "kind": "sphere", "position": [10, 0, 0], "radius": 10 }
+          ]
+        }
+      ],
+      "points": [[5, 0, 0, -5], [0, 0, 0, 0], [-5, 0, 0, 5]]
+    },
+    {
+      "name": "smooth union",
+      "trees": [
+        {
+          "id": "u",
+          "kind": "union",
+          "position": [0, 0, 0],
+          "blend": 8,
+          "children": [
+            { "id": "a", "kind": "sphere", "position": [-10, 0, 0], "radius": 5 },
+            { "id": "b", "kind": "sphere", "position": [10, 0, 0], "radius": 5 }
+          ]
+        }
+      ],
+      "points": [[0, 0, 0, 3], [10, 0, 0, -5], [3, 0, 0, 1.875]]
+    },
+    {
+      "name": "smooth subtract",
+      "trees": [
+        {
+          "id": "s",
+          "kind": "subtract",
+          "position": [0, 0, 0],
+          "blend": 4,
+          "children": [
+            { "id": "a", "kind": "box", "position": [0, 0, 0], "size": [20, 20, 20] },
+            { "id": "b", "kind": "sphere", "position": [10, 0, 0], "radius": 5 }
+          ]
+        }
+      ],
+      "points": [[8, 0, 0, 3], [10, 4, 0, 1.5625], [10, 6, 0, 0.5625]]
+    },
+    {
+      "name": "smooth intersect",
+      "trees": [
+        {
+          "id": "i",
+          "kind": "intersect",
+          "position": [0, 0, 0],
+          "blend": 4,
+          "children": [
+            { "id": "a", "kind": "sphere", "position": [0, 0, 0], "radius": 10 },
+            { "id": "b", "kind": "sphere", "position": [10, 0, 0], "radius": 10 }
+          ]
+        }
+      ],
+      "points": [[5, 0, 0, -4], [0, 0, 0, 0]]
+    },
+    {
+      "name": "shell",
+      "trees": [
+        {
+          "id": "s",
+          "kind": "shell",
+          "position": [0, 0, 0],
+          "thickness": 2,
+          "child": { "id": "a", "kind": "sphere", "position": [0, 0, 0], "radius": 10 }
+        }
+      ],
+      "points": [[10, 0, 0, 0], [9, 0, 0, -1], [8, 0, 0, 0], [0, 0, 0, 8], [12, 0, 0, 2]]
+    },
+    {
+      "name": "round",
+      "trees": [
+        {
+          "id": "r",
+          "kind": "round",
+          "position": [0, 0, 0],
+          "radius": 2,
+          "child": { "id": "a", "kind": "box", "position": [0, 0, 0], "size": [10, 10, 10] }
+        }
+      ],
+      "points": [[7, 0, 0, 0], [0, 0, 0, -7], [8, 9, 0, 3]]
+    },
+    {
+      "name": "nested transforms",
+      "trees": [
+        {
+          "id": "g",
+          "kind": "union",
+          "position": [100, 0, 0],
+          "rotation": [0, 0, 90],
+          "blend": 0,
+          "children": [{ "id": "a", "kind": "sphere", "position": [10, 0, 0], "radius": 5 }]
+        }
+      ],
+      "points": [[100, 10, 0, -5], [100, 20, 0, 5], [100, 0, 0, 5]]
+    },
+    {
+      "name": "several objects",
+      "trees": [
+        { "id": "a", "kind": "sphere", "position": [-20, 0, 0], "radius": 5 },
+        { "id": "b", "kind": "box", "position": [20, 0, 0], "size": [10, 10, 10] }
+      ],
+      "points": [[0, 0, 0, 15], [-20, 0, 0, -5], [20, 0, 0, -5], [30, 0, 0, 5], [-40, 0, 0, 15]]
+    }
+  ]
+}

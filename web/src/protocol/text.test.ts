@@ -30,6 +30,16 @@ describe('parseCommand', () => {
     })
   })
 
+  it('turns number parameters into numbers', () => {
+    expect(parseCommand('organic.set o1 n3 position.x -12.5')).toEqual({
+      ok: true,
+      command: {
+        name: 'organic.set',
+        params: { id: 'o1', node: 'n3', param: 'position.x', value: -12.5 },
+      },
+    })
+  })
+
   it('leaves optional parameters out', () => {
     expect(parseCommand('  object.add  ')).toEqual({
       ok: true,
@@ -45,6 +55,10 @@ describe('parseCommand', () => {
     ['undo now', 'Unexpected "now" for undo'],
     ['mode.set organic mode=machines', '"mode" is given twice'],
     ['object.add "open', 'Unclosed quote'],
+    ['organic.set o1 n3 radius big', '"value" must be a number'],
+    ['organic.set o1 n3 radius ""', '"value" must be a number'],
+    ['organic.set o1 n3 radius Infinity', '"value" must be a number'],
+    ['view.set sideways', '"view" must be one of: front, back, left, right, top, bottom'],
   ])('rejects %j', (text, error) => {
     expect(parseCommand(text)).toEqual({ ok: false, error })
   })

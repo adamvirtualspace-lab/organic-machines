@@ -1,8 +1,10 @@
 import type { Command, CommandResult } from './commands'
-import type { EngineState, EngineStats } from './types'
+import type { EngineState, EngineStats, LogMessage } from './types'
 
 export interface EventMap {
   'state.changed': EngineState
+  /** Output from long-running commands such as benchmarks, for the console. */
+  log: LogMessage
 }
 export type EventName = keyof EventMap
 

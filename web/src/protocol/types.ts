@@ -4,6 +4,9 @@ export type Mode = (typeof MODES)[number]
 export const VIEWS = ['front', 'back', 'left', 'right', 'top', 'bottom'] as const
 export type ViewName = (typeof VIEWS)[number]
 
+export const DEMO_SCENES = ['test', 'stress'] as const
+export type DemoScene = (typeof DEMO_SCENES)[number]
+
 export interface ObjectInfo {
   readonly id: string
   readonly name: string
@@ -25,4 +28,15 @@ export interface EngineStats {
   readonly jsHeapBytes: number | null
   readonly wasmHeapBytes: number
   readonly gpuBytesEstimate: number | null
+  /** Resolution of the SDF pass relative to the screen: below 1 while the view is moving. */
+  readonly sdfScale: number | null
+  /** How many times the SDF shader has been rebuilt. Editing a value must not raise it. */
+  readonly shaderBuilds: number | null
+  /** Time from the last rebuild to its first finished frame. */
+  readonly shaderBuildMs: number | null
+}
+
+export interface LogMessage {
+  readonly kind: 'info' | 'error'
+  readonly text: string
 }

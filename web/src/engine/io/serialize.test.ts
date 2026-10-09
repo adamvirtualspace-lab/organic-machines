@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Document } from '../doc/document'
-import { SCHEMA_VERSION, type Migration } from '../doc/schema'
+import { MIGRATIONS, SCHEMA_VERSION, type Migration } from '../doc/schema'
 import { deserializeDocument, serializeDocument } from './serialize'
 
 const doc: Document = {
@@ -43,6 +43,7 @@ describe('document save format', () => {
       items: [{ id: 'o1', name: 'Blob', mode: 'organic' }],
     })
     const migrations: Record<number, Migration> = {
+      ...MIGRATIONS,
       0: ({ items, ...rest }) => ({ ...rest, schemaVersion: 1, units: 'mm', objects: items }),
     }
     expect(deserializeDocument(old, migrations)).toEqual({
@@ -51,6 +52,34 @@ describe('document save format', () => {
       nextId: 2,
       objects: [{ id: 'o1', name: 'Blob', mode: 'organic' }],
     })
+  })
+
+  it('reads a version 1 file, from before objects had shapes', () => {
+    expect(deserializeDocument(file({ schemaVersion: 1 }))).toEqual(doc)
+  })
+
+  it('round-trips an object with a shape, and rejects a damaged one', () => {
+    const shaped: Document = {
+      ...doc,
+      objects: [
+        {
+          id: 'o1',
+          name: 'Blob',
+          mode: 'organic',
+          sdf: { id: 'n1', kind: 'sphere', position: [1, 2, 3], radius: 4 },
+        },
+      ],
+    }
+    expect(deserializeDocument(serializeDocument(shaped))).toEqual(shaped)
+
+    const broken = file({ objects: [{ ...shaped.objects[0], sdf: { id: 'n1', kind: 'sphere' } }] })
+    expect(() => deserializeDocument(broken)).toThrow(
+      'This file is damaged: in object 1, shape node "n1" has an invalid parameter',
+    )
+    const onMachines = file({ objects: [{ ...shaped.objects[0], mode: 'machines' }] })
+    expect(() => deserializeDocument(onMachines)).toThrow(
+      'This file is damaged: object 1 is invalid',
+    )
   })
 
   it('refuses an older file it has no migration for', () => {

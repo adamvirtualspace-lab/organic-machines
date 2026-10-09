@@ -19,7 +19,7 @@ export function parseCommandWords(input: readonly string[]): ParseResult {
 
   const spec: CommandSpec = COMMAND_SPECS[name]
   const positional = [...(spec.positional ?? [])]
-  const params: Record<string, string> = {}
+  const params: Record<string, string | number> = {}
 
   for (const word of words) {
     const eq = word.indexOf('=')
@@ -35,8 +35,12 @@ export function parseCommandWords(input: readonly string[]): ParseResult {
     const value = params[key]
     if (value === undefined) {
       if (!param.optional) return fail(`${name} needs "${key}"`)
-    } else if (param.type === 'enum' && !param.values.includes(value)) {
+    } else if (param.type === 'enum' && !param.values.includes(String(value))) {
       return fail(`"${key}" must be one of: ${param.values.join(', ')}`)
+    } else if (param.type === 'number') {
+      const number = value === '' ? NaN : Number(value)
+      if (!Number.isFinite(number)) return fail(`"${key}" must be a number`)
+      params[key] = number
     }
   }
   // The spec table is typed against CommandParams, so checked params match the command's shape.

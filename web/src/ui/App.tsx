@@ -1,6 +1,8 @@
+import { useEffect } from 'react'
 import { CommandConsole } from './CommandConsole'
 import { ObjectTree } from './ObjectTree'
 import { PropertiesPanel } from './PropertiesPanel'
+import { useServices } from './services'
 import { StatsOverlay } from './StatsOverlay'
 import { useUi } from './store'
 import { Toolbar } from './Toolbar'
@@ -10,6 +12,14 @@ import { Viewport } from './Viewport'
 export function App() {
   const consoleOpen = useUi((s) => s.consoleOpen)
   const statsOpen = useUi((s) => s.statsOpen)
+  const log = useUi((s) => s.log)
+  const { engine } = useServices()
+
+  // Long-running commands such as benchmarks report through the engine's log.
+  useEffect(
+    () => engine.subscribe('log', (message) => log(message.kind, message.text)),
+    [engine, log],
+  )
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background text-xs text-foreground select-none">

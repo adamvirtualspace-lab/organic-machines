@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { SCHEMA_VERSION } from '../web/src/engine/doc/schema'
 import { runCli } from './main'
 
 async function cli(...args: string[]) {
@@ -33,6 +34,21 @@ describe('cli', () => {
     ])
   })
 
+  it('builds a demo scene, edits a shape and reports bad numbers', async () => {
+    const script = join(dir, 'demo.txt')
+    const saved = join(dir, 'demo.json')
+    await writeFile(script, 'demo.scene test\norganic.set o1 n3 radius 12.5\n')
+    expect((await cli('--script', script, '--out', saved)).code).toBe(0)
+    const sphere = JSON.parse(await readFile(saved, 'utf8')).objects[0].sdf.children[1]
+    expect(sphere).toMatchObject({ id: 'n3', kind: 'sphere', radius: 12.5 })
+
+    const bad = await cli('--in', saved, 'organic.set', 'o1', 'n3', 'radius', 'wide')
+    expect(bad).toMatchObject({
+      code: 1,
+      err: 'organic.set o1 n3 radius wide: "value" must be a number',
+    })
+  })
+
   it('reports a bad command and exits non-zero', async () => {
     const result = await cli('mode.set', 'sideways')
     expect(result.code).toBe(1)
@@ -49,7 +65,7 @@ describe('cli', () => {
     )
 
     expect((await cli('--script', script, '--out', saved)).code).toBe(0)
-    expect(JSON.parse(await readFile(saved, 'utf8')).schemaVersion).toBe(1)
+    expect(JSON.parse(await readFile(saved, 'utf8')).schemaVersion).toBe(SCHEMA_VERSION)
 
     const reloaded = await cli('--in', saved)
     expect(JSON.parse(reloaded.out).objects.map((o: { name: string }) => o.name)).toEqual([
