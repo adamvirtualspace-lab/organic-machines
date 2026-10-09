@@ -22,7 +22,8 @@ export interface ViewDelegate {
 }
 
 export interface Engine extends EngineApi {
-  setViewDelegate(delegate: ViewDelegate | null): void
+  /** Returns the function that detaches this delegate, which does nothing if a newer one took over. */
+  attachView(delegate: ViewDelegate): () => void
 }
 
 const MODE_LABEL: Record<Mode, string> = { organic: 'Organic', machines: 'Machines' }
@@ -145,8 +146,11 @@ export function createEngine(): Engine {
       listeners[event].add(listener)
       return () => listeners[event].delete(listener)
     },
-    setViewDelegate(delegate) {
+    attachView(delegate) {
       view = delegate
+      return () => {
+        if (view === delegate) view = null
+      }
     },
   }
 }

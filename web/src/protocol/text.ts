@@ -7,9 +7,13 @@ export type ParseResult = { ok: true; command: Command } | { ok: false; error: s
  * Words without `key=` fill the command's positional parameters in order.
  */
 export function parseCommand(text: string): ParseResult {
-  const tokens = tokenize(text)
-  if (typeof tokens === 'string') return fail(tokens)
-  const [name, ...words] = tokens
+  const words = tokenize(text)
+  return typeof words === 'string' ? fail(words) : parseCommandWords(words)
+}
+
+/** Parses a command already split into words, as a shell hands them to the CLI. */
+export function parseCommandWords(input: readonly string[]): ParseResult {
+  const [name, ...words] = input
   if (name === undefined) return fail('Empty command')
   if (!isCommandName(name)) return fail(`Unknown command "${name}"`)
 

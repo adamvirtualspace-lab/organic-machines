@@ -2,3 +2,5 @@ dist
 node_modules
 package-lock.json
 plan.md
+web/src/ui/components/ui
+web/src/index.css

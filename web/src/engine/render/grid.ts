@@ -28,10 +28,13 @@ export function createGrid(): Grid {
   const reach = uniform(1000)
 
   // Anti-aliased lines: distance to the nearest line, measured in pixels via screen derivatives.
-  const lines = (size: typeof cell | ReturnType<typeof cell.mul>) => {
+  const lines = (size: THREE.Node<'float'>) => {
     const coord = positionWorld.xy.div(size)
-    const pixels = abs(fract(coord.sub(0.5)).sub(0.5)).div(fwidth(coord))
-    return float(1).sub(min(min(pixels.x, pixels.y), 1))
+    const perPixel = fwidth(coord) // cells crossed per screen pixel
+    const pixels = abs(fract(coord.sub(0.5)).sub(0.5)).div(perPixel)
+    const line = float(1).sub(min(min(pixels.x, pixels.y), 1))
+    // Lines closer together than a few pixels would merge into a grey haze, so fade them out.
+    return line.mul(float(1).sub(smoothstep(0.08, 0.3, max(perPixel.x, perPixel.y))))
   }
   const fade = float(1).sub(
     smoothstep(reach.mul(0.35), reach, length(positionWorld.sub(cameraPosition))),
@@ -43,7 +46,7 @@ export function createGrid(): Grid {
     side: THREE.DoubleSide,
   })
   material.colorNode = vec3(0.62, 0.65, 0.7)
-  material.opacityNode = max(lines(cell).mul(0.18), lines(cell.mul(10)).mul(0.45)).mul(fade)
+  material.opacityNode = max(lines(cell).mul(0.12), lines(cell.mul(10)).mul(0.32)).mul(fade)
 
   const plane = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material)
   plane.frustumCulled = false

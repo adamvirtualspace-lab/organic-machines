@@ -99,7 +99,7 @@ A 3D modeller with two modes, switched from a toggle at the top of the screen:
 2. **Three calls make up the interface:** `execute(command)` to change something, `query(...)` to ask something, and `subscribe(event)` to hear about changes. Commands are plain data with a name and typed parameters, defined once in `/protocol`.
 3. **Interactive commands have four steps:** begin, update, commit, cancel. A gizmo drag sends updates through the same interface, which is how live previews work without the UI touching engine internals.
 4. **Every command also has a text form**, e.g. `fillet edges=e12,e13 radius=2`. That gives an in-app command console, a headless CLI in Node for tests and batch export, and scripting. The headless CLI covers the document, OCCT, the CPU SDF evaluator, meshing and export; it cannot render, since Node has no WebGPU. Text is parsed only at those edges; the UI itself sends structured objects, so there is no parsing cost during a drag.
-5. **Bulk data never crosses the interface.** Meshes and textures stay inside the engine, which draws into a canvas the UI hands it.
+5. **Bulk data never crosses the interface.** Meshes and textures stay inside the engine, which creates its own canvas inside a container element the UI hands it.
 6. **The engine is the source of truth.** The UI's Zustand store only mirrors what engine events report.
 
 ### Organic mode rules
@@ -184,17 +184,18 @@ Each phase ends with a working, demoable app. Two tracks share Phase 0.
 M1 and B1 come early on purpose: the OCCT kernel and the bridge are the biggest technical risks, so prove both before investing heavily in either mode's UX.
 
 ### Phase 0 — Scaffold & mode switcher
-- Vite + React + TS strict, three.js WebGPURenderer, orbit camera, infinite grid, axis gizmo
-- Tailwind + shadcn/ui set up with the compact theme; responsive shell (panels collapse to drawers on small screens)
-- Pointer Events camera controls for mouse and touch; PWA manifest so it installs on Android
-- Top bar with the **Organic | Machines** toggle; toolbar contents change per mode
-- Document model with `mode` per object; empty object tree
-- Engine/UI split in place from the start: `/protocol` schema, `execute` / `query` / `subscribe`, the import lint rule, and a command console in the UI
-- Headless CLI that loads the engine in Node and runs a text command, used by the test suite
-- ESLint + Prettier, Vitest
-- Document schema version field and a migration hook in save/load from the first commit
-- Dev overlay showing frame time, JS heap, WASM heap and estimated GPU memory (Memory rule 1)
+- [x] Vite + React + TS strict, three.js WebGPURenderer, orbit camera, infinite grid, axis gizmo
+- [x] Tailwind + shadcn/ui set up with the compact theme (shadcn's Mira preset); responsive shell (panels collapse to drawers on small screens)
+- [x] Pointer Events camera controls for mouse and touch; PWA manifest so it installs on Android
+- [x] Top bar with the **Organic | Machines** toggle; toolbar contents change per mode
+- [x] Document model with `mode` per object; empty object tree
+- [x] Engine/UI split in place from the start: `/protocol` schema, `execute` / `query` / `subscribe`, the import lint rule, and a command console in the UI
+- [x] Headless CLI that loads the engine in Node and runs a text command, used by the test suite
+- [x] ESLint + Prettier, Vitest
+- [x] Document schema version field and a migration hook in save/load from the first commit
+- [x] Dev overlay showing frame time, JS heap, WASM heap and estimated GPU memory (Memory rule 1)
 - **Done when:** app runs on desktop and in Chrome on an Android device with touch navigation, toggle switches toolbars, the same mode switch works typed into the console and run from the CLI, and a browser without WebGPU gets a clear "not supported" message.
+- **Status:** everything above is verified on the reference PC. Still to check on the reference phone: that it runs with touch navigation, and that it installs from the manifest. Phone layout was checked only in an emulated 360 px viewport.
 
 ### Organic track
 

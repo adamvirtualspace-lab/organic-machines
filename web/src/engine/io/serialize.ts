@@ -28,7 +28,7 @@ export function deserializeDocument(
   }
 
   let version = raw.schemaVersion
-  if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) {
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 0) {
     throw new CommandError('This file has no valid schema version')
   }
   if (version > SCHEMA_VERSION) {

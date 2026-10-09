@@ -32,7 +32,8 @@ export function createAxisGizmo(): AxisGizmo {
         .sub(camera.position)
         .normalize()
       group.position.copy(camera.position).addScaledVector(corner, depth)
-      const worldPerPixel = (2 * depth * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / height
+      const worldPerPixel =
+        (2 * depth * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) / height
       group.scale.setScalar(SIZE_PX * worldPerPixel)
     },
   }

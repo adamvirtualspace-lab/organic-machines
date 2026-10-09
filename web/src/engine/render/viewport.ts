@@ -37,7 +37,8 @@ async function checkSupport(): Promise<ViewportSupport> {
     return { ok: false, reason }
   }
   const adapter = await navigator.gpu.requestAdapter()
-  if (!adapter) return { ok: false, reason: 'WebGPU is available, but no graphics adapter was found.' }
+  if (!adapter)
+    return { ok: false, reason: 'WebGPU is available, but no graphics adapter was found.' }
   return { ok: true }
 }
 
@@ -81,6 +82,7 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
     camera.near = distance / 100
     camera.far = distance * 100
     camera.updateProjectionMatrix()
+    camera.updateMatrixWorld() // The gizmo unprojects through the camera before the renderer updates it.
     grid.update(controls.target, distance)
     gizmo.update(camera, width, height)
     renderer.render(scene, camera)
@@ -98,7 +100,7 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
   resize.observe(container)
   controls.addEventListener('change', invalidate)
 
-  engine.setViewDelegate({
+  const detachView = engine.attachView({
     home() {
       camera.position.copy(HOME_POSITION)
       controls.target.set(0, 0, 0)
@@ -112,7 +114,7 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
   })
 
   return () => {
-    engine.setViewDelegate(null)
+    detachView()
     cancelAnimationFrame(frame)
     resize.disconnect()
     controls.dispose()
@@ -125,7 +127,12 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
  * A rough figure, since WebGPU reports no memory use: the swap chain, the multisampled colour
  * and depth targets, and every vertex and index buffer in the scene.
  */
-function estimateGpuBytes(scene: THREE.Scene, width: number, height: number, ratio: number): number {
+function estimateGpuBytes(
+  scene: THREE.Scene,
+  width: number,
+  height: number,
+  ratio: number,
+): number {
   const pixels = width * ratio * height * ratio
   let bytes = pixels * 4 * (1 + 2 * MSAA_SAMPLES)
   const seen = new Set<THREE.BufferGeometry>()
