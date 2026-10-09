@@ -9,6 +9,7 @@ import {
   type EventName,
   type Mode,
   type QueryMap,
+  type ViewName,
 } from '../protocol'
 import { emptyDocument, type DocObject, type Document } from './doc/document'
 import { History } from './doc/history'
@@ -18,6 +19,8 @@ import { deserializeDocument, serializeDocument } from './io/serialize'
 /** What the viewport contributes when one is attached. Absent in the headless CLI. */
 export interface ViewDelegate {
   home(): void
+  setView(view: ViewName): void
+  flipView(): void
   stats(): Pick<EngineStats, 'frameMs' | 'gpuBytesEstimate'>
 }
 
@@ -49,6 +52,11 @@ export function createEngine(): Engine {
   function change(next: Document): void {
     history.record(doc, next)
     doc = next
+  }
+
+  function viewport(): ViewDelegate {
+    if (!view) throw new CommandError('No viewport is attached')
+    return view
   }
 
   /** Finds an object, refusing ones that belong to the other mode. */
@@ -107,10 +115,9 @@ export function createEngine(): Engine {
       if (!next) throw new CommandError('Nothing to redo')
       doc = next
     },
-    'view.home': () => {
-      if (!view) throw new CommandError('No viewport is attached')
-      view.home()
-    },
+    'view.home': () => viewport().home(),
+    'view.set': ({ view: name }) => viewport().setView(name),
+    'view.flip': () => viewport().flipView(),
   }
 
   const queries: { [K in keyof QueryMap]: () => QueryMap[K] } = {

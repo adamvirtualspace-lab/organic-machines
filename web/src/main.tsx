@@ -10,6 +10,9 @@ import { ServicesContext, type Services } from './ui/services'
 const engine = createEngine()
 const services: Services = { engine, viewport: createViewportHost(engine) }
 
+// Dev builds expose the engine as `__om.engine` for poking at it from the browser console.
+if (import.meta.env.DEV) Object.assign(window, { __om: services })
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ServicesContext value={services}>

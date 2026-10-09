@@ -1,8 +1,8 @@
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import * as THREE from 'three/webgpu'
 import type { ViewportHost, ViewportSupport } from '../../protocol'
 import type { Engine } from '../engine'
 import { createAxisGizmo } from './axisGizmo'
+import { createCameraControls } from './cameraControls'
 import { createGrid } from './grid'
 
 const BACKGROUND = 0x17191d
@@ -59,11 +59,12 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
   const gizmo = createAxisGizmo()
   scene.add(grid.object, gizmo.object)
 
-  // OrbitControls listens to Pointer Events: one finger or left-drag orbits,
-  // two fingers or right-drag pan, pinch or wheel zooms.
-  const controls = new OrbitControls(camera, canvas)
-  controls.minDistance = 1
-  controls.maxDistance = 50_000
+  const navigation = createCameraControls(camera, canvas, (command) => {
+    if (command === 'home') void engine.execute({ name: 'view.home', params: {} })
+    else if (command === 'flip') void engine.execute({ name: 'view.flip', params: {} })
+    else void engine.execute({ name: 'view.set', params: command })
+  })
+  const controls = navigation.orbit
 
   let width = 1
   let height = 1
@@ -107,6 +108,8 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
       controls.update()
       invalidate()
     },
+    setView: navigation.setView,
+    flipView: navigation.flipView,
     stats: () => ({
       frameMs,
       gpuBytesEstimate: estimateGpuBytes(scene, width, height, renderer.getPixelRatio()),
@@ -117,7 +120,7 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
     detachView()
     cancelAnimationFrame(frame)
     resize.disconnect()
-    controls.dispose()
+    navigation.dispose()
     renderer.dispose()
     canvas.remove()
   }

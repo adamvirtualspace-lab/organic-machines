@@ -1,6 +1,9 @@
 export const MODES = ['organic', 'machines'] as const
 export type Mode = (typeof MODES)[number]
 
+export const VIEWS = ['front', 'back', 'left', 'right', 'top', 'bottom'] as const
+export type ViewName = (typeof VIEWS)[number]
+
 export interface ObjectInfo {
   readonly id: string
   readonly name: string

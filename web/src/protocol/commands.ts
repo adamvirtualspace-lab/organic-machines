@@ -1,4 +1,4 @@
-import { MODES, type Mode } from './types'
+import { MODES, VIEWS, type Mode, type ViewName } from './types'
 
 type NoParams = Record<never, never>
 
@@ -13,6 +13,8 @@ export interface CommandParams {
   undo: NoParams
   redo: NoParams
   'view.home': NoParams
+  'view.set': { view: ViewName }
+  'view.flip': NoParams
 }
 
 export type CommandName = keyof CommandParams
@@ -68,6 +70,12 @@ export const COMMAND_SPECS: {
   undo: { summary: 'Undo the last change', params: {} },
   redo: { summary: 'Redo the last undone change', params: {} },
   'view.home': { summary: 'Reset the camera', params: {} },
+  'view.set': {
+    summary: 'Look at the scene from one side',
+    params: { view: { type: 'enum', values: VIEWS } },
+    positional: ['view'],
+  },
+  'view.flip': { summary: 'Look from the opposite side', params: {} },
 }
 
 export function isCommandName(name: string): name is CommandName {
