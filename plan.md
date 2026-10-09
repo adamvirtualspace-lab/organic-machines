@@ -93,6 +93,15 @@ A 3D modeller with two modes, switched from a toggle at the top of the screen:
 8. **The layout is responsive.** Side panels become drawers or bottom sheets on small screens, and controls grow to touch-sized targets on coarse pointers. shadcn/ui covers panels, menus and dialogs; gizmos and in-viewport numeric inputs are custom.
 9. **Documents autosave to browser storage**, and import/export use the standard file picker and download, which work on Android.
 
+### Engine and UI boundary
+
+1. **The engine and the UI are separate, linked only by a command interface.** The engine is everything except the React panels: the document, both modes, the workers, the renderer and viewport input. The UI is the panels, toolbars and menus. Neither imports the other's code; a lint rule enforces it.
+2. **Three calls make up the interface:** `execute(command)` to change something, `query(...)` to ask something, and `subscribe(event)` to hear about changes. Commands are plain data with a name and typed parameters, defined once in `/protocol`.
+3. **Interactive commands have four steps:** begin, update, commit, cancel. A gizmo drag sends updates through the same interface, which is how live previews work without the UI touching engine internals.
+4. **Every command also has a text form**, e.g. `fillet edges=e12,e13 radius=2`. That gives an in-app command console, a headless CLI in Node for tests and batch export, and scripting. The headless CLI covers the document, OCCT, the CPU SDF evaluator, meshing and export; it cannot render, since Node has no WebGPU. Text is parsed only at those edges; the UI itself sends structured objects, so there is no parsing cost during a drag.
+5. **Bulk data never crosses the interface.** Meshes and textures stay inside the engine, which draws into a canvas the UI hands it.
+6. **The engine is the source of truth.** The UI's Zustand store only mirrors what engine events report.
+
 ### Organic mode rules
 
 1. **Document ≠ SDF graph.** Organic objects compile into a lower-level SDF graph.
@@ -151,14 +160,17 @@ A 3D modeller with two modes, switched from a toggle at the top of the screen:
 ```
 /web
   /src
-    /doc        document model, objects, commands, undo/redo, schema
-    /organic    SDF graph, compiler, TSL codegen, SDF function library
-    /machines   commands, curves and regions, snapping, OCCT worker bridge, topology picking
-    /render     three.js setup, raymarch pass, mesh display, grid, gizmos
-    /ui         React components (top mode bar, object tree, properties, toolbars)
-    /workers    worker entry points (organic-mesher, occt with its solid store)
-    /io         save/load (JSON + B-rep), mesh export
-/core           Rust crate, created only if O4 goes ahead
+    /protocol     the command, query and event schema: the only thing both sides import
+    /engine       no React anywhere in here
+      /doc        document model, objects, undo/redo, schema
+      /organic    SDF graph, compiler, TSL codegen, SDF function library
+      /machines   commands, curves and regions, snapping, OCCT worker bridge, topology picking
+      /render     three.js setup, raymarch pass, mesh display, grid, gizmos, viewport input
+      /workers    worker entry points (organic-mesher, occt with its solid store)
+      /io         save/load (JSON + B-rep), mesh export
+    /ui           React components (top mode bar, object tree, properties, toolbars, command console); no three.js or OCCT imports
+/cli              headless Node runner for the engine: tests, scripts, batch export
+/core             Rust crate, created only if O4 goes ahead
 /docs           design notes, decisions, benchmarks
 plan.md
 CLAUDE.md
@@ -177,10 +189,12 @@ M1 and B1 come early on purpose: the OCCT kernel and the bridge are the biggest 
 - Pointer Events camera controls for mouse and touch; PWA manifest so it installs on Android
 - Top bar with the **Organic | Machines** toggle; toolbar contents change per mode
 - Document model with `mode` per object; empty object tree
+- Engine/UI split in place from the start: `/protocol` schema, `execute` / `query` / `subscribe`, the import lint rule, and a command console in the UI
+- Headless CLI that loads the engine in Node and runs a text command, used by the test suite
 - ESLint + Prettier, Vitest
 - Document schema version field and a migration hook in save/load from the first commit
 - Dev overlay showing frame time, JS heap, WASM heap and estimated GPU memory (Memory rule 1)
-- **Done when:** app runs on desktop and in Chrome on an Android device with touch navigation, toggle switches toolbars, and a browser without WebGPU gets a clear "not supported" message.
+- **Done when:** app runs on desktop and in Chrome on an Android device with touch navigation, toggle switches toolbars, the same mode switch works typed into the console and run from the CLI, and a browser without WebGPU gets a clear "not supported" message.
 
 ### Organic track
 
@@ -288,6 +302,7 @@ Runs only if O3 misses its meshing target, or sharp edges need dual contouring t
 - Organic picking approach: GPU ID buffer vs. CPU evaluation on click.
 - **Android packaging:** a PWA needs nothing extra. For the Play Store, a Trusted Web Activity runs in Chrome and so keeps Chrome's WebGPU support; Tauri on Android uses the system WebView, where WebGPU support is unconfirmed.
 - **Android GPU coverage:** Chrome ships WebGPU on Android 12+ for ARM, Qualcomm and Intel GPUs; Samsung Xclipse (some Exynos phones) is still in progress. The reference phone (Snapdragon 888) is covered, so no fallback is planned; revisit if other devices matter.
+- **Engine in its own worker:** with the boundary in place, the whole engine could later move off the main thread and draw through an OffscreenCanvas, keeping the UI responsive during heavy frames. Not planned for v1.
 - Whether the bridge joins v1 (decided in B1).
 - Whether O4 runs at all (decided by the O3 benchmark).
 
@@ -298,4 +313,5 @@ Runs only if O3 misses its meshing target, or sharp edges need dual contouring t
 - Paste only the relevant part of errors and stack traces.
 - Always state versions (three.js, OCCT build, shadcn/Tailwind) when asking about APIs.
 - One branch per phase; tick off items here as they land.
+- UI work and engine work can run as separate sessions. A change to `/protocol` is the only thing both need to agree on first.
 - Move the stable rules from sections 2–4 into `CLAUDE.md` so every session starts with them.
