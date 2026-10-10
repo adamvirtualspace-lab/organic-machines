@@ -47,6 +47,17 @@ describe('adding shapes', () => {
     expect(state().selection).toEqual({ object: 'o1', node: 'n2' })
   })
 
+  it('starts a shape that joins a boolean on top of what the boolean already holds', async () => {
+    const { run, shape } = setup()
+    await run({ name: 'organic.add', params: { kind: 'box' } })
+    await run({ name: 'organic.add', params: { kind: 'sphere', id: 'o1' } })
+    await run({ name: 'organic.add', params: { kind: 'cone', id: 'o1' } })
+    const cone = findNode(shape(), 'n4')!
+    // The box and sphere reach z = 70, so the new shape must start well above the box's centre.
+    expect(cone.position[2]).toBeGreaterThan(50)
+    expect(cone.position[2]).toBeLessThan(90)
+  })
+
   it('joins an existing boolean of the same kind instead of nesting another', async () => {
     const { run, shape, kinds } = setup()
     await run({ name: 'organic.add', params: { kind: 'box' } })

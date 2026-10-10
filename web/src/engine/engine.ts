@@ -22,6 +22,7 @@ import { History } from './doc/history'
 import { CommandError } from './errors'
 import { deserializeDocument, serializeDocument } from './io/serialize'
 import { demoScene } from './organic/demos'
+import { compileScene, MAX_BOUND } from './organic/graph'
 import {
   addShape,
   moveNode,
@@ -92,7 +93,7 @@ const RESTING_HEIGHT: Record<PrimitiveKind, number> = {
   cone: 20,
   plane: 0,
 }
-/** A shape added to an existing one starts this far above it, so it is not buried inside. */
+/** A shape added next to another starts this far above it, so it is not buried inside. */
 const ADDED_SHAPE_LIFT = 30
 
 /** Creates the engine core. It has no DOM or rendering dependency, so it also runs in Node. */
@@ -262,11 +263,13 @@ export function createEngine(): Engine {
       }
       const anchor = findNode(target.sdf, node ?? target.sdf.id)
       if (!anchor) throw new CommandError(`There is no node "${node}"`)
-      // A shape joining a boolean sits in that boolean's space; otherwise it shares the anchor's.
-      const [x, y, z]: Vec3 = anchor.kind === op ? [0, 0, 0] : anchor.position
+      // A shape joining a boolean sits in that boolean's space, on top of what is there;
+      // otherwise it shares the anchor's space and starts just above the anchor.
+      const [x, y, z]: Vec3 = anchor.position
+      const start: Vec3 = anchor.kind === op ? topOf(anchor) : [x, y, z + ADDED_SHAPE_LIFT]
       const shapeId = nextNodeId(target.sdf)
       const groupId = `n${Number(shapeId.slice(1)) + 1}`
-      const shape = newPrimitive(kind, shapeId, [x, y, z + ADDED_SHAPE_LIFT])
+      const shape = newPrimitive(kind, shapeId, start)
       const sdf = addShape(target.sdf, anchor.id, op, shape, groupId)
       change(replace(target, { ...target, sdf }))
       selection = { object: id, node: shapeId }
@@ -367,6 +370,16 @@ export function createEngine(): Engine {
       }
     },
   }
+}
+
+/** A point near the top of a node's contents, in the space its children sit in. */
+function topOf(node: SdfTree): Vec3 {
+  const local = { ...node, position: [0, 0, 0], rotation: undefined, scale: undefined } as SdfTree
+  const graph = compileScene([local])
+  const [x, y, z, radius] = graph.params.slice(graph.sceneBound, graph.sceneBound + 4) as number[]
+  if (radius! >= MAX_BOUND) return [0, 0, ADDED_SHAPE_LIFT]
+  const round = (value: number) => Math.round(value * 100) / 100
+  return [round(x!), round(y!), round(z! + radius! * 0.8)]
 }
 
 /** Chrome-only; other environments report null. */

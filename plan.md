@@ -213,13 +213,16 @@ M1 and B1 come early on purpose: the OCCT kernel and the bridge are the biggest 
 - **Moved to M1:** bounding rays by the scene depth buffer. It only saves work once there are meshes to bound against, and M1 brings the first one.
 
 #### O2 — Organic editing UX
-- Add primitives and booleans from the Organic toolbar
-- Object tree showing each Organic object's SDF nodes (add, delete, reorder, rename, hide), properties panel with numeric fields
-- Picking (GPU ID buffer or CPU raymarch on click), transform gizmo
-- One shader per object, each drawn into the shared SDF target with depth testing, so a structural edit rebuilds only the object being edited (chosen in O1; see `/docs/benchmarks.md`)
-- Cached colour and depth layer for inactive objects while the camera is still (Level-of-detail rule 2)
-- Undo/redo, save/load
+- [x] Add primitives and booleans from the Organic toolbar (Add / Cut / Keep overlap, plus Shell, Round and Mirror)
+- [x] Object tree showing each Organic object's SDF nodes (add, delete, reorder, rename, hide), properties panel with numeric fields that can also be dragged
+- [x] Picking by CPU raymarch on click; move gizmo along the axes of the shape's parent. Rotation and scale are numeric fields only for now
+- [x] One shader per object, each drawn into the shared SDF target with depth testing, so a structural edit rebuilds only the object being edited (chosen in O1; see `/docs/benchmarks.md`)
+- [x] Cached colour and depth layer for inactive objects while the camera is still (Level-of-detail rule 2)
+- [x] Undo/redo, save/load, and autosave to browser storage (Shared rule 9)
+- [x] Live edits: drags preview through begin / update / commit and land as one undo step (Engine and UI boundary, rule 3)
 - **Done when:** a smooth character-ish or product-ish shape can be built entirely through the UI, saved, reloaded and fully undone.
+- **Status:** done on the reference PC with mouse input. Still to check: touch on the reference phone, the Save download and the Open file picker (both were only exercised through their commands), and rotate and scale gizmos, which are not built.
+- **Known rough edge:** on a phone the properties drawer covers the view, so a change is not visible until the drawer closes. A bottom sheet that leaves the view showing would fix it.
 
 #### O3 — Meshing & export
 - Surface nets mesher in TS inside a worker, built on the CPU evaluator from O1, streaming slice by slice (Memory rule 5)
@@ -304,7 +307,6 @@ Runs only if O3 misses its meshing target, or sharp edges need dual contouring t
 - **Selection after a command:** always clear, or remap faces/edges using OCCT's modified/generated shape history.
 - Pure TSL vs. raw WGSL for the raymarcher.
 - **Generated shader vs. interpreter shader:** O1 measured about 7 ms of build time per primitive, so generated shaders stay, split one per object in O2. If single objects grow past about 25 primitives and edits feel slow, add one fixed shader that walks the graph from a data buffer: it never recompiles but runs slower per pixel, so it would show the edit at once while the generated shader builds in the background.
-- Organic picking approach: GPU ID buffer vs. CPU evaluation on click.
 - **Android packaging:** a PWA needs nothing extra. For the Play Store, a Trusted Web Activity runs in Chrome and so keeps Chrome's WebGPU support; Tauri on Android uses the system WebView, where WebGPU support is unconfirmed.
 - **Android GPU coverage:** Chrome ships WebGPU on Android 12+ for ARM, Qualcomm and Intel GPUs; Samsung Xclipse (some Exynos phones) is still in progress. The reference phone (Snapdragon 888) is covered, so no fallback is planned; revisit if other devices matter.
 - **Engine in its own worker:** with the boundary in place, the whole engine could later move off the main thread and draw through an OffscreenCanvas, keeping the UI responsive during heavy frames. Not planned for v1.

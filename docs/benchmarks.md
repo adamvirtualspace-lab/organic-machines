@@ -50,8 +50,28 @@ structural change do not rebuild.
 Idle with the stress scene: about 85 MB at 753×838, 109 MB at 750×1434, about 155 MB at 1936×1104
 (JS heap plus the GPU estimate). The budget is 1 GB.
 
-### Conformance
+### Conformance (O1)
 
 `selftest.sdf` runs the shader against the hand-worked vectors in
 `web/src/engine/organic/conformance.json`: 85 of 85 points match across 23 cases. The CPU evaluator
 passes the same vectors in the unit tests.
+
+## O2 — one shader per object (2026-10-10)
+
+Same PC, canvas 419×838 px (the Browser pane was narrower for this run, so frame times are not
+comparable with the O1 table above). Stress scene: 100 primitives in 10 objects.
+
+| Measure                                             | O1, one shader for the scene | O2, one shader per object              |
+| --------------------------------------------------- | ---------------------------- | -------------------------------------- |
+| Building all shaders at load                        | 714 ms                       | 912 ms                                 |
+| Structural edit to one 10-primitive object          | 714 ms (everything rebuilt)  | 112 ms                                 |
+| Frame while changing a value on the selected object | every object re-marched      | 3.5 ms: only that object is re-marched |
+
+- **The 200 ms structural-edit budget is now met** for the stress scene, because an edit rebuilds
+  one object's shader, not all ten. A single object of more than about 25 primitives would still
+  miss it.
+- **Loading costs slightly more**, since ten small shaders build a little slower than one large one.
+- Full quality with every object redrawn: 7.1 ms median at this canvas size; 3.9 ms while moving.
+- `selftest.sdf` still passes 85 of 85 points.
+
+Not re-measured after O2: the larger canvas sizes from the O1 table, and anything on the phone.

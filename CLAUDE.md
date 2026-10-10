@@ -15,10 +15,16 @@ npm run cli -- mode.set machines   # run engine commands with no browser
 ```
 
 Useful console commands in the app: `help`, `demo.scene test`, `demo.scene stress`,
-`organic.set o1 n3 radius 50`, `bench.run` (frame and shader build times),
+`organic.add sphere`, `organic.set o1 n3 radius 50`, `bench.run` (frame and shader build times),
 `selftest.sdf` (shader against the conformance vectors), `view.set top`.
 In dev builds the browser console has `__om.engine` for calling `execute` and `query` directly.
-Nothing is saved between page loads yet, so a refresh starts empty.
+The document autosaves to localStorage (`organic-machines:autosave`) and is restored on load;
+clear that key to start empty.
+
+When testing through the Browser pane: `requestAnimationFrame` does not fire while the pane is
+hidden, so test scripts should wait with timers, and screenshots can lag a frame behind the state.
+If the dev server answers 404 after a branch switch, restart it: Vite loses its config when
+`vite.config.ts` disappears, even briefly.
 
 Testing on the Android phone: connect it by USB, open `chrome://inspect` on the PC and forward port 5173.
 The phone must use `localhost:5173`; over the LAN address the page is not a secure context and WebGPU is unavailable.
@@ -42,6 +48,8 @@ cli/               headless Node runner for the engine
 - **`web/src/engine/index.ts` must stay free of rendering imports** so the CLI and tests load it in Node. Viewport code lives under `engine/render`.
 - **A failed command changes nothing.** Handlers throw `CommandError` before mutating.
 - **Every SDF node exists twice:** in `organic/evaluate.ts` (CPU) and `organic/tslCodegen.ts` (shader). Change both, add points to `organic/conformance.json`, then run the unit tests and `selftest.sdf`.
+- **Each Organic object has its own shader and is drawn through a box around its bounds.** Objects never blend with each other; the depth test joins them. The selected object is redrawn every frame, the rest only when they or the view change.
+- **A drag is a live edit:** `edit.begin`, any number of changes, then `edit.commit` (one undo step) or `edit.cancel`. Send the in-between changes with `run(command, { quiet: true })` so the console is not flooded.
 - **Editing a value must not rebuild the shader.** Graph nodes hold structure only; values live in the parameter list. Check the "Shader builds" row in the overlay.
 - **Keep the distance function to one call site in the raymarch shader, and store its result with `.toVar()` before branching.** The shader compiler inlines it; breaking either rule multiplied build time by ten (see `docs/benchmarks.md`).
 - **Documents are immutable**; undo keeps old references. Bump `SCHEMA_VERSION` and add a migration when the saved shape changes.
