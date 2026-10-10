@@ -26,8 +26,8 @@ export interface ViewDelegate {
   home(): void
   setView(view: ViewName): void
   flipView(): void
-  /** Called once on attach and then after every change to the document. */
-  documentChanged(doc: Document): void
+  /** Called once on attach and then whenever the document or the editing mode changes. */
+  sceneChanged(doc: Document, mode: Mode): void
   bench(): Promise<readonly LogMessage[]>
   selfTest(): Promise<readonly LogMessage[]>
   stats(): ViewStats
@@ -175,13 +175,14 @@ export function createEngine(): Engine {
       }
       const handler = handlers[command.name] as (params: unknown) => void | Promise<void>
       const before = doc
+      const modeBefore = mode
       try {
         await handler(command.params)
       } catch (error) {
         if (error instanceof CommandError) return { ok: false, error: error.message }
         throw error
       }
-      if (doc !== before) view?.documentChanged(doc)
+      if (doc !== before || mode !== modeBefore) view?.sceneChanged(doc, mode)
       state = snapshot()
       for (const listener of listeners['state.changed']) listener(state)
       return { ok: true }
@@ -193,7 +194,7 @@ export function createEngine(): Engine {
     },
     attachView(delegate) {
       view = delegate
-      delegate.documentChanged(doc)
+      delegate.sceneChanged(doc, mode)
       return () => {
         if (view === delegate) view = null
       }

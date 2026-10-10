@@ -71,7 +71,7 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
 
   const grid = createGrid()
   const gizmo = createAxisGizmo()
-  const raymarch = createRaymarchPass(renderer)
+  const raymarch = createRaymarchPass(renderer, BACKGROUND)
   scene.add(raymarch.composite, grid.object, gizmo.object)
 
   const navigation = createCameraControls(camera, canvas, (command) => {
@@ -200,7 +200,9 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
     },
     setView: navigation.setView,
     flipView: navigation.flipView,
-    documentChanged(doc) {
+    sceneChanged(doc, mode) {
+      // Organic shapes stay visible in Machines mode, but dimmed to show they are locked.
+      raymarch.setDimmed(mode !== 'organic')
       const trees = doc.objects.flatMap((object) => (object.sdf ? [object.sdf] : []))
       graph = trees.length > 0 ? compileScene(trees) : null
       raymarch.setGraph(graph)

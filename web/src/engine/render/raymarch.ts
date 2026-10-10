@@ -1,6 +1,7 @@
 import {
   Break,
   clamp,
+  color,
   Discard,
   dot,
   float,
@@ -33,6 +34,7 @@ const HIT_FRACTION = 0.0007
 const MIN_HIT_DISTANCE = 0.002 // mm
 const CLAY = [0.78, 0.76, 0.73] as const
 const MAX_BUILT_SHADERS = 6
+const DIMMED_STRENGTH = 0.35
 /** Entry 0 is "no offset"; the other four are the corners used to read the surface gradient. */
 const TETRAHEDRON = uniformArray<'vec3'>(
   [
@@ -56,6 +58,8 @@ export interface RaymarchPass {
   readonly composite: THREE.Mesh
   /** Pass null when there is nothing to draw. Rebuilds the shader only if the structure changed. */
   setGraph(graph: SdfGraph | null): void
+  /** Fades the shapes towards the background, for when they belong to the other mode. */
+  setDimmed(dimmed: boolean): void
   render(
     camera: THREE.PerspectiveCamera,
     width: number,
@@ -74,7 +78,11 @@ export interface RaymarchPass {
  * composite layer then copies into the main frame. Writing real depth is what lets meshes,
  * the grid and gizmos intersect SDF shapes correctly.
  */
-export function createRaymarchPass(renderer: THREE.WebGPURenderer): RaymarchPass {
+export function createRaymarchPass(
+  renderer: THREE.WebGPURenderer,
+  background: number,
+): RaymarchPass {
+  const strength = uniform(1)
   const target = new THREE.RenderTarget(1, 1, { depthBuffer: true })
   // Stored as sRGB so eight bits per channel do not band in the shadows.
   target.texture.colorSpace = THREE.SRGBColorSpace
@@ -88,7 +96,10 @@ export function createRaymarchPass(renderer: THREE.WebGPURenderer): RaymarchPass
   const maxSteps = uniform(96, 'int')
 
   const quad = new THREE.QuadMesh(new THREE.MeshBasicNodeMaterial())
-  const composite = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), compositeMaterial(target))
+  const composite = new THREE.Mesh(
+    new THREE.PlaneGeometry(2, 2),
+    compositeMaterial(target, strength, background),
+  )
   composite.frustumCulled = false
   composite.renderOrder = -1000 // First, so everything else depth-tests against it.
   composite.visible = false
@@ -191,6 +202,9 @@ export function createRaymarchPass(renderer: THREE.WebGPURenderer): RaymarchPass
 
   return {
     composite,
+    setDimmed(dimmed) {
+      strength.value = dimmed ? DIMMED_STRENGTH : 1
+    },
     setGraph(graph) {
       composite.visible = graph !== null && graph.roots.length > 0
       if (!graph || !composite.visible) return
@@ -257,13 +271,18 @@ export function createRaymarchPass(renderer: THREE.WebGPURenderer): RaymarchPass
 }
 
 /** Copies the SDF image into the main frame and writes its depth, skipping pixels the rays missed. */
-function compositeMaterial(target: THREE.RenderTarget): THREE.Material {
+function compositeMaterial(
+  target: THREE.RenderTarget,
+  strength: THREE.Node<'float'>,
+  background: number,
+): THREE.Material {
   const material = new THREE.MeshBasicNodeMaterial()
   const depth = texture(target.depthTexture!, screenUV).x
   material.vertexNode = vec4(positionGeometry.xy, 0, 1)
   material.colorNode = Fn(() => {
     Discard(depth.greaterThanEqual(1))
-    return texture(target.texture, screenUV)
+    const shaded = texture(target.texture, screenUV)
+    return vec4(mix(color(background), shaded.rgb, strength), 1)
   })()
   material.depthNode = depth
   material.depthFunc = THREE.AlwaysDepth

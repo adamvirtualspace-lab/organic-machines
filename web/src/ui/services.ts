@@ -38,9 +38,10 @@ export function useRun(): (command: Command) => Promise<CommandResult> {
   const { engine } = useServices()
   return useCallback(
     async (command) => {
-      const result = await engine.execute(command)
       const { log } = useUi.getState()
+      // Echoed first, so output a command reports while it runs lands underneath it.
       log('input', formatCommand(command))
+      const result = await engine.execute(command)
       if (!result.ok) log('error', result.error)
       return result
     },

@@ -14,6 +14,12 @@ npm run build      # typecheck + production build into /dist
 npm run cli -- mode.set machines   # run engine commands with no browser
 ```
 
+Useful console commands in the app: `help`, `demo.scene test`, `demo.scene stress`,
+`organic.set o1 n3 radius 50`, `bench.run` (frame and shader build times),
+`selftest.sdf` (shader against the conformance vectors), `view.set top`.
+In dev builds the browser console has `__om.engine` for calling `execute` and `query` directly.
+Nothing is saved between page loads yet, so a refresh starts empty.
+
 Testing on the Android phone: connect it by USB, open `chrome://inspect` on the PC and forward port 5173.
 The phone must use `localhost:5173`; over the LAN address the page is not a secure context and WebGPU is unavailable.
 
@@ -22,6 +28,8 @@ The phone must use `localhost:5173`; over the LAN address the page is not a secu
 ```
 web/src/protocol   commands, queries, events and their text form: the only thing both sides import
 web/src/engine     document, modes, rendering, viewport input. No React.
+  organic/         shape trees, the graph compiler, both SDF evaluators, conformance vectors
+  render/          viewport, camera controls, raymarch pass, grid, gizmo
 web/src/ui         React panels, toolbars and console. No three.js or kernel imports.
 web/src/main.tsx   the one place the engine and the UI are wired together
 cli/               headless Node runner for the engine
@@ -33,6 +41,9 @@ cli/               headless Node runner for the engine
 - **The engine is the source of truth.** The UI reads `query('state')` and re-renders on `state.changed`. Zustand holds UI-only state.
 - **`web/src/engine/index.ts` must stay free of rendering imports** so the CLI and tests load it in Node. Viewport code lives under `engine/render`.
 - **A failed command changes nothing.** Handlers throw `CommandError` before mutating.
+- **Every SDF node exists twice:** in `organic/evaluate.ts` (CPU) and `organic/tslCodegen.ts` (shader). Change both, add points to `organic/conformance.json`, then run the unit tests and `selftest.sdf`.
+- **Editing a value must not rebuild the shader.** Graph nodes hold structure only; values live in the parameter list. Check the "Shader builds" row in the overlay.
+- **Keep the distance function to one call site in the raymarch shader, and store its result with `.toVar()` before branching.** The shader compiler inlines it; breaking either rule multiplied build time by ten (see `docs/benchmarks.md`).
 - **Documents are immutable**; undo keeps old references. Bump `SCHEMA_VERSION` and add a migration when the saved shape changes.
 - **Z is up, units are millimetres.**
 - **Optimisation is a requirement, memory above all.** The viewport renders on demand, not every frame. Check the stats overlay on both reference devices (see plan.md section 1).

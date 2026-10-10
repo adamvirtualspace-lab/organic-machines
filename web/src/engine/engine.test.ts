@@ -154,14 +154,14 @@ describe('engine', () => {
     })
   })
 
-  it('tells an attached view about the document, and only when it changes', async () => {
+  it('tells an attached view about the document and mode, and only when they change', async () => {
     const engine = createEngine()
-    const seen: number[] = []
+    const seen: [number, string][] = []
     const detach = engine.attachView({
       home: () => {},
       setView: () => {},
       flipView: () => {},
-      documentChanged: (doc) => seen.push(doc.objects.length),
+      sceneChanged: (doc, mode) => seen.push([doc.objects.length, mode]),
       bench: async () => [{ kind: 'info', text: 'benched' }],
       selfTest: async () => [],
       stats: () => ({
@@ -172,12 +172,16 @@ describe('engine', () => {
         shaderBuildMs: 4,
       }),
     })
-    expect(seen).toEqual([0])
+    expect(seen).toEqual([[0, 'organic']])
 
     await engine.execute({ name: 'object.add', params: {} })
     await engine.execute({ name: 'mode.set', params: { mode: 'machines' } })
     await engine.execute({ name: 'view.home', params: {} })
-    expect(seen).toEqual([0, 1])
+    expect(seen).toEqual([
+      [0, 'organic'],
+      [1, 'organic'],
+      [1, 'machines'],
+    ])
     expect(engine.query('stats')).toMatchObject({ frameMs: 1, shaderBuilds: 3, wasmHeapBytes: 0 })
 
     const logged: string[] = []

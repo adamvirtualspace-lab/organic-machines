@@ -8,11 +8,11 @@ phone has not been measured yet.
 
 Stress scene: 100 primitives in 10 objects (351 graph nodes, 1040 parameters), all raymarched live.
 
-| Canvas | Full quality (scale 1, 128 steps) | While moving (scale 0.5, 64 steps) |
-|---|---|---|
-| 753×838 px | 18.3 ms = 55 fps | 5.9 ms = 169 fps |
-| 750×1434 px (phone-sized, DPR 2) | 30.0 ms = 33 fps | 8.3 ms = 120 fps |
-| 1936×1104 px | 44.8 ms = 22 fps | 12.3 ms = 81 fps |
+| Canvas                           | Full quality (scale 1, 128 steps) | While moving (scale 0.5, 64 steps) |
+| -------------------------------- | --------------------------------- | ---------------------------------- |
+| 753×838 px                       | 18.3 ms = 55 fps                  | 5.9 ms = 169 fps                   |
+| 750×1434 px (phone-sized, DPR 2) | 30.0 ms = 33 fps                  | 8.3 ms = 120 fps                   |
+| 1936×1104 px                     | 44.8 ms = 22 fps                  | 12.3 ms = 81 fps                   |
 
 Test scene (2 objects, 3 primitives) at 1936×1104: 6.5 ms full quality, 5.0 ms while moving.
 

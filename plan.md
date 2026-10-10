@@ -200,20 +200,23 @@ M1 and B1 come early on purpose: the OCCT kernel and the bridge are the biggest 
 ### Organic track
 
 #### O1 — SDF preview
-- Graph schema + TS types
-- SDF function library (primitives, booleans, smooth ops) in TSL
-- Codegen: graph → shader; parameters packed into one buffer
-- Full-screen raymarch pass with normals, studio lighting, depth write; rays bounded by the scene depth buffer
-- CPU evaluator in TS for the same graph, plus the shared conformance vectors (Testing rule 1)
-- Hardcoded test scene (box smooth-minus sphere, plus a torus)
-- Interaction resolution scaling for the raymarch pass (Level-of-detail rule 1)
-- Generated stress scene (100 primitives with smooth blends); record frame time and shader compile time in `/docs`
+- [x] Graph schema + TS types
+- [x] SDF function library (primitives, booleans, smooth ops) in TSL
+- [x] Codegen: graph → shader; parameters packed into one buffer
+- [x] Full-screen raymarch pass with normals, studio lighting, depth write
+- [x] CPU evaluator in TS for the same graph, plus the shared conformance vectors (Testing rule 1)
+- [x] Hardcoded test scene (box smooth-minus sphere, plus a torus): `demo.scene test`
+- [x] Interaction resolution scaling for the raymarch pass (Level-of-detail rule 1)
+- [x] Generated stress scene (100 primitives with smooth blends): `demo.scene stress`; frame time and shader compile time recorded in `/docs/benchmarks.md`
 - **Done when:** changing a parameter updates without shader recompile; GPU and CPU evaluators pass the conformance vectors; the stress scene meets the budget in Organic rule 4, or the miss is recorded with the mitigation chosen.
+- **Status:** done on the reference PC; not yet run on the reference phone. The frame budget is met while the view moves and missed at full quality above about 1 megapixel. The 200 ms shader build budget is met for objects up to about 25 primitives and missed for the whole stress scene in one shader (about 0.7 s). Mitigation chosen: one shader per object, built in O2.
+- **Moved to M1:** bounding rays by the scene depth buffer. It only saves work once there are meshes to bound against, and M1 brings the first one.
 
 #### O2 — Organic editing UX
 - Add primitives and booleans from the Organic toolbar
 - Object tree showing each Organic object's SDF nodes (add, delete, reorder, rename, hide), properties panel with numeric fields
 - Picking (GPU ID buffer or CPU raymarch on click), transform gizmo
+- One shader per object, each drawn into the shared SDF target with depth testing, so a structural edit rebuilds only the object being edited (chosen in O1; see `/docs/benchmarks.md`)
 - Cached colour and depth layer for inactive objects while the camera is still (Level-of-detail rule 2)
 - Undo/redo, save/load
 - **Done when:** a smooth character-ish or product-ish shape can be built entirely through the UI, saved, reloaded and fully undone.
@@ -238,6 +241,7 @@ Runs only if O3 misses its meshing target, or sharp edges need dual contouring t
 #### M1 — Kernel spike
 - Load an OCCT WASM build in a worker (compare opencascade.js and Replicad's build: size, maintenance, API coverage)
 - Make a box, fillet one edge, tessellate, display in the viewport next to an SDF object
+- Bound SDF rays by the mesh depth buffer, so pixels already covered by a nearer mesh stop marching early (moved from O1)
 - Drag the fillet radius with live preview: measure time per update, since this decides whether history-free editing feels good on OCCT in WASM
 - Try the direct edits (move face, offset face) and record how often OCCT fails on them
 - Round-trip a solid through B-rep save/load and time the serialisation, since it runs after every commit (Machines rule 11)
@@ -299,7 +303,7 @@ Runs only if O3 misses its meshing target, or sharp edges need dual contouring t
 - **Whether the memory budgets are reachable with OCCT at all on the phone** (measured in M1). Fallback: Machines mode is view-only on the low memory tier.
 - **Selection after a command:** always clear, or remap faces/edges using OCCT's modified/generated shape history.
 - Pure TSL vs. raw WGSL for the raymarcher.
-- **Generated shader vs. interpreter shader:** if shader compile time on structural edits misses the budget in O1, switch to one fixed shader that walks the graph from a data buffer. It never recompiles but runs slower per pixel.
+- **Generated shader vs. interpreter shader:** O1 measured about 7 ms of build time per primitive, so generated shaders stay, split one per object in O2. If single objects grow past about 25 primitives and edits feel slow, add one fixed shader that walks the graph from a data buffer: it never recompiles but runs slower per pixel, so it would show the edit at once while the generated shader builds in the background.
 - Organic picking approach: GPU ID buffer vs. CPU evaluation on click.
 - **Android packaging:** a PWA needs nothing extra. For the Play Store, a Trusted Web Activity runs in Chrome and so keeps Chrome's WebGPU support; Tauri on Android uses the system WebView, where WebGPU support is unconfirmed.
 - **Android GPU coverage:** Chrome ships WebGPU on Android 12+ for ARM, Qualcomm and Intel GPUs; Samsung Xclipse (some Exynos phones) is still in progress. The reference phone (Snapdragon 888) is covered, so no fallback is planned; revisit if other devices matter.

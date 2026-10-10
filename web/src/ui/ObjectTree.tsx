@@ -14,7 +14,8 @@ export function ObjectTree() {
       {objects.length === 0 ? (
         <p className="px-3 py-3 text-muted-foreground">
           No objects yet. Open the console and run{' '}
-          <code className="rounded bg-muted px-1 py-0.5">object.add</code> to add an empty one.
+          <code className="rounded bg-muted px-1 py-0.5">demo.scene test</code> to load a sample
+          scene. Modelling tools arrive in later phases.
         </p>
       ) : (
         <ul className="min-h-0 flex-1 overflow-y-auto py-1">
