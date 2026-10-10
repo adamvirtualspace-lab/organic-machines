@@ -7,6 +7,7 @@ describe('engine', () => {
     expect(createEngine().query('state')).toEqual({
       mode: 'organic',
       objects: [],
+      selection: null,
       canUndo: false,
       canRedo: false,
     })
@@ -161,7 +162,7 @@ describe('engine', () => {
       home: () => {},
       setView: () => {},
       flipView: () => {},
-      sceneChanged: (doc, mode) => seen.push([doc.objects.length, mode]),
+      sceneChanged: ({ doc, mode }) => seen.push([doc.objects.length, mode]),
       bench: async () => [{ kind: 'info', text: 'benched' }],
       selfTest: async () => [],
       stats: () => ({

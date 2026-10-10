@@ -19,7 +19,7 @@ export function parseCommandWords(input: readonly string[]): ParseResult {
 
   const spec: CommandSpec = COMMAND_SPECS[name]
   const positional = [...(spec.positional ?? [])]
-  const params: Record<string, string | number> = {}
+  const params: Record<string, string | number | boolean> = {}
 
   for (const word of words) {
     const eq = word.indexOf('=')
@@ -41,6 +41,9 @@ export function parseCommandWords(input: readonly string[]): ParseResult {
       const number = value === '' ? NaN : Number(value)
       if (!Number.isFinite(number)) return fail(`"${key}" must be a number`)
       params[key] = number
+    } else if (param.type === 'boolean') {
+      if (value !== 'true' && value !== 'false') return fail(`"${key}" must be true or false`)
+      params[key] = value === 'true'
     }
   }
   // The spec table is typed against CommandParams, so checked params match the command's shape.

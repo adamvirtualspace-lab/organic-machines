@@ -200,7 +200,7 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
     },
     setView: navigation.setView,
     flipView: navigation.flipView,
-    sceneChanged(doc, mode) {
+    sceneChanged({ doc, mode }) {
       // Organic shapes stay visible in Machines mode, but dimmed to show they are locked.
       raymarch.setDimmed(mode !== 'organic')
       const trees = doc.objects.flatMap((object) => (object.sdf ? [object.sdf] : []))

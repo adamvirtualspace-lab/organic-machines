@@ -1,71 +1,196 @@
+import {
+  AXES,
+  BOOLEAN_KINDS,
+  childrenOf,
+  findNode,
+  type Axis,
+  type BooleanKind,
+  type ModifierKind,
+  type PrimitiveKind,
+  type PrimitiveNode,
+  type SdfTree,
+  type Vec3,
+} from '../../protocol'
 import { CommandError } from '../errors'
-import type { Vec3 } from './math'
 
-/**
- * The editable shape of one Organic object: a tree of primitives, booleans and modifiers.
- * Lengths are millimetres. Primitives are centred on their own origin with Z as their axis.
- */
-interface NodeBase {
-  readonly id: string
-  readonly position: Vec3
-  /** Euler angles in degrees, about X then Y then Z. Adding or removing it recompiles the shader. */
-  readonly rotation?: Vec3
-  /** Uniform scale. Adding or removing it recompiles the shader. */
-  readonly scale?: number
-}
-
-export type PrimitiveNode = NodeBase &
-  (
-    | { readonly kind: 'sphere'; readonly radius: number }
-    | { readonly kind: 'box'; readonly size: Vec3 }
-    | { readonly kind: 'roundBox'; readonly size: Vec3; readonly radius: number }
-    | { readonly kind: 'cylinder'; readonly radius: number; readonly height: number }
-    /** `height` is the full length, caps included. */
-    | { readonly kind: 'capsule'; readonly radius: number; readonly height: number }
-    /** `major` is the ring radius, `minor` the tube radius. */
-    | { readonly kind: 'torus'; readonly major: number; readonly minor: number }
-    /** Base of `radius` at the bottom, apex at the top. */
-    | { readonly kind: 'cone'; readonly radius: number; readonly height: number }
-    /** Everything below the local XY plane. */
-    | { readonly kind: 'plane' }
-  )
-
-/** The first child combined with each later one. `blend` above zero smooths the join by that distance. */
-export type BooleanNode = NodeBase & {
-  readonly kind: 'union' | 'subtract' | 'intersect'
-  readonly blend: number
-  readonly children: readonly SdfTree[]
-}
-
-export type ModifierNode = NodeBase &
-  /** Hollows the child, keeping a wall of `thickness` inside its surface. */
-  (
-    | { readonly kind: 'shell'; readonly thickness: number; readonly child: SdfTree }
-    /** Grows the child outward by `radius`, rounding its edges. */
-    | { readonly kind: 'round'; readonly radius: number; readonly child: SdfTree }
-    | { readonly kind: 'mirror'; readonly axis: 'x' | 'y' | 'z'; readonly child: SdfTree }
-  )
-
-export type SdfTree = PrimitiveNode | BooleanNode | ModifierNode
+export { childrenOf, findNode }
+export type { BooleanNode, ModifierNode, PrimitiveNode, SdfTree } from '../../protocol'
 
 const NUMBER_FIELDS = ['radius', 'height', 'major', 'minor', 'blend', 'thickness', 'scale']
 const VECTOR_FIELDS = ['position', 'rotation', 'size']
 const OPTIONAL_FIELDS = ['rotation', 'scale']
-const AXES = ['x', 'y', 'z']
+/** Blend given to a boolean made by adding a shape: Organic joins are smooth unless made sharp. */
+export const DEFAULT_BLEND = 6
 
-export function childrenOf(node: SdfTree): readonly SdfTree[] {
-  if ('children' in node) return node.children
-  if ('child' in node) return [node.child]
-  return []
+const isBoolean = (kind: string): kind is BooleanKind =>
+  (BOOLEAN_KINDS as readonly string[]).includes(kind)
+
+function requireNode(tree: SdfTree, id: string): SdfTree {
+  const node = findNode(tree, id)
+  if (!node) throw new CommandError(`There is no node "${id}"`)
+  return node
 }
 
-export function findNode(tree: SdfTree, id: string): SdfTree | undefined {
-  if (tree.id === id) return tree
+function parentOf(tree: SdfTree, id: string): SdfTree | undefined {
   for (const child of childrenOf(tree)) {
-    const found = findNode(child, id)
+    if (child.id === id) return tree
+    const found = parentOf(child, id)
     if (found) return found
   }
   return undefined
+}
+
+/** Replaces one node, sharing every untouched branch. Returning undefined removes it. */
+function mapNode(
+  tree: SdfTree,
+  id: string,
+  change: (node: SdfTree) => SdfTree | undefined,
+): SdfTree | undefined {
+  if (tree.id === id) return change(tree)
+  if ('children' in tree) {
+    const children = tree.children.flatMap((child) => mapNode(child, id, change) ?? [])
+    if (children.length === 0) return undefined // A boolean with nothing left goes too.
+    const same =
+      children.length === tree.children.length && children.every((c, i) => c === tree.children[i])
+    return same ? tree : { ...tree, children }
+  }
+  if ('child' in tree) {
+    const child = mapNode(tree.child, id, change)
+    if (!child) return undefined // So does a modifier with nothing to modify.
+    return child === tree.child ? tree : { ...tree, child }
+  }
+  return tree
+}
+
+/** An id no node in the tree uses yet. */
+export function nextNodeId(tree: SdfTree | undefined): string {
+  let highest = 0
+  const visit = (node: SdfTree) => {
+    const number = /^n(\d+)$/.exec(node.id)
+    if (number) highest = Math.max(highest, Number(number[1]))
+    childrenOf(node).forEach(visit)
+  }
+  if (tree) visit(tree)
+  return `n${highest + 1}`
+}
+
+export function newPrimitive(kind: PrimitiveKind, id: string, position: Vec3): PrimitiveNode {
+  const base = { id, position }
+  switch (kind) {
+    case 'sphere':
+      return { ...base, kind, radius: 20 }
+    case 'box':
+      return { ...base, kind, size: [40, 40, 40] }
+    case 'roundBox':
+      return { ...base, kind, size: [40, 40, 40], radius: 6 }
+    case 'cylinder':
+      return { ...base, kind, radius: 15, height: 40 }
+    case 'capsule':
+      return { ...base, kind, radius: 12, height: 50 }
+    case 'torus':
+      return { ...base, kind, major: 25, minor: 8 }
+    case 'cone':
+      return { ...base, kind, radius: 18, height: 40 }
+    case 'plane':
+      return { ...base, kind }
+  }
+}
+
+/**
+ * Combines `shape` with the node `targetId`. It joins an existing boolean of the same kind
+ * where one is at hand (the target itself, or its parent); otherwise the target is wrapped in a
+ * new boolean, which takes the id `groupId`.
+ */
+export function addShape(
+  tree: SdfTree,
+  targetId: string,
+  op: BooleanKind,
+  shape: SdfTree,
+  groupId: string,
+): SdfTree {
+  const target = requireNode(tree, targetId)
+  const parent = parentOf(tree, targetId)
+  const host = target.kind === op ? target : parent?.kind === op ? parent : undefined
+  if (host && 'children' in host) {
+    return mapNode(tree, host.id, () => ({ ...host, children: [...host.children, shape] }))!
+  }
+  return mapNode(tree, targetId, () => ({
+    id: groupId,
+    kind: op,
+    position: [0, 0, 0],
+    blend: DEFAULT_BLEND,
+    children: [target, shape],
+  }))!
+}
+
+/** Removes a node. Returns undefined when nothing is left of the tree. */
+export function removeNode(tree: SdfTree, id: string): SdfTree | undefined {
+  requireNode(tree, id)
+  return mapNode(tree, id, () => undefined)
+}
+
+/** Moves a node earlier (`by` below zero) or later among its siblings. */
+export function moveNode(tree: SdfTree, id: string, by: number): SdfTree {
+  requireNode(tree, id)
+  const parent = parentOf(tree, id)
+  if (!parent || !('children' in parent)) throw new CommandError('This node has no siblings')
+  const from = parent.children.findIndex((child) => child.id === id)
+  const to = from + Math.sign(by)
+  if (to < 0 || to >= parent.children.length) {
+    throw new CommandError(`It is already ${by < 0 ? 'first' : 'last'}`)
+  }
+  const children = [...parent.children]
+  ;[children[from], children[to]] = [children[to]!, children[from]!]
+  return mapNode(tree, parent.id, () => ({ ...parent, children }))!
+}
+
+/** Puts a modifier around a node. The modifier takes the id `modifierId`. */
+export function wrapNode(
+  tree: SdfTree,
+  id: string,
+  kind: ModifierKind,
+  modifierId: string,
+): SdfTree {
+  const child = requireNode(tree, id)
+  const base = { id: modifierId, position: [0, 0, 0] as Vec3, child }
+  const modifier: SdfTree =
+    kind === 'shell'
+      ? { ...base, kind, thickness: 3 }
+      : kind === 'round'
+        ? { ...base, kind, radius: 3 }
+        : { ...base, kind, axis: 'x' }
+  return mapNode(tree, id, () => modifier)!
+}
+
+/** Sets an optional field, or removes it entirely when the value is undefined. */
+function withOptional(node: SdfTree, field: 'name' | 'hidden', value: string | true | undefined) {
+  const copy: Record<string, unknown> = { ...node }
+  if (value === undefined) delete copy[field]
+  else copy[field] = value
+  return copy as unknown as SdfTree
+}
+
+export function renameNode(tree: SdfTree, id: string, name: string): SdfTree {
+  requireNode(tree, id)
+  const trimmed = name.trim()
+  return mapNode(tree, id, (node) => withOptional(node, 'name', trimmed || undefined))!
+}
+
+export function setNodeHidden(tree: SdfTree, id: string, hidden: boolean): SdfTree {
+  requireNode(tree, id)
+  return mapNode(tree, id, (node) => withOptional(node, 'hidden', hidden || undefined))!
+}
+
+export function setBooleanKind(tree: SdfTree, id: string, op: BooleanKind): SdfTree {
+  const node = requireNode(tree, id)
+  if (!isBoolean(node.kind)) throw new CommandError(`A ${node.kind} does not combine shapes`)
+  return mapNode(tree, id, (found) => ({ ...found, kind: op }) as SdfTree)!
+}
+
+export function setMirrorAxis(tree: SdfTree, id: string, axis: Axis): SdfTree {
+  const node = requireNode(tree, id)
+  if (node.kind !== 'mirror') throw new CommandError(`A ${node.kind} has no mirror axis`)
+  return mapNode(tree, id, (found) => ({ ...found, axis }) as SdfTree)!
 }
 
 /**
@@ -73,7 +198,7 @@ export function findNode(tree: SdfTree, id: string): SdfTree | undefined {
  * or a vector field with an axis such as `position.x`. Untouched branches are shared.
  */
 export function setTreeParam(tree: SdfTree, nodeId: string, param: string, value: number): SdfTree {
-  if (!findNode(tree, nodeId)) throw new CommandError(`There is no node "${nodeId}"`)
+  requireNode(tree, nodeId)
   if (!Number.isFinite(value)) throw new CommandError('The value must be a number')
   return mapNode(tree, nodeId, (node) => {
     const [field = '', axis, ...extra] = param.split('.')
@@ -84,7 +209,7 @@ export function setTreeParam(tree: SdfTree, nodeId: string, param: string, value
     if (!allowed || extra.length > 0) throw fail()
 
     if (VECTOR_FIELDS.includes(field)) {
-      const index = AXES.indexOf(axis ?? '')
+      const index = (AXES as readonly string[]).indexOf(axis ?? '')
       if (index < 0) throw new CommandError(`"${field}" needs an axis: ${field}.x, .y or .z`)
       const next = [...((record[field] as Vec3 | undefined) ?? [0, 0, 0])]
       next[index] = value
@@ -93,17 +218,28 @@ export function setTreeParam(tree: SdfTree, nodeId: string, param: string, value
     if (!NUMBER_FIELDS.includes(field) || axis !== undefined) throw fail()
     if (field === 'scale' && value <= 0) throw new CommandError('Scale must be above zero')
     return { ...node, [field]: value }
-  })
+  })!
 }
 
-function mapNode(tree: SdfTree, id: string, change: (node: SdfTree) => SdfTree): SdfTree {
-  if (tree.id === id) return change(tree)
+/**
+ * The tree as it should be drawn: hidden nodes dropped, along with any boolean or modifier left
+ * with nothing in it. A subtract or intersect whose first shape is hidden disappears entirely,
+ * since the rest only make sense as changes to that shape.
+ */
+export function visibleTree(tree: SdfTree): SdfTree | undefined {
+  if (tree.hidden) return undefined
   if ('children' in tree) {
-    const children = tree.children.map((child) => mapNode(child, id, change))
-    return children.some((child, i) => child !== tree.children[i]) ? { ...tree, children } : tree
+    const kept = tree.children.map(visibleTree)
+    if (tree.kind !== 'union' && !kept[0]) return undefined
+    const children = kept.filter((child) => child !== undefined)
+    if (children.length === 0) return undefined
+    const same =
+      children.length === tree.children.length && children.every((c, i) => c === tree.children[i])
+    return same ? tree : { ...tree, children }
   }
   if ('child' in tree) {
-    const child = mapNode(tree.child, id, change)
+    const child = visibleTree(tree.child)
+    if (!child) return undefined
     return child === tree.child ? tree : { ...tree, child }
   }
   return tree
@@ -137,8 +273,9 @@ export function parseTree(raw: unknown, seenIds = new Set<string>()): SdfTree {
   if (typeof raw !== 'object' || raw === null) throw bad('a shape node is not an object')
   const node = raw as Record<string, unknown>
   const { id, kind } = node
-  if (typeof id !== 'string' || seenIds.has(id))
+  if (typeof id !== 'string' || seenIds.has(id)) {
     throw bad('a shape node has a missing or repeated id')
+  }
   seenIds.add(id)
   if (typeof kind !== 'string' || !Object.hasOwn(KINDS, kind)) {
     throw bad(`shape node "${id}" has an unknown kind`)
@@ -148,23 +285,29 @@ export function parseTree(raw: unknown, seenIds = new Set<string>()): SdfTree {
   const vectorsOk = ['position', ...spec.vectors].every((field) => isVec3(node[field]))
   const rotationOk = node.rotation === undefined || isVec3(node.rotation)
   const scaleOk = node.scale === undefined || (isNumber(node.scale) && node.scale > 0)
-  if (!numbersOk || !vectorsOk || !rotationOk || !scaleOk) {
+  const nameOk = node.name === undefined || typeof node.name === 'string'
+  const hiddenOk = node.hidden === undefined || typeof node.hidden === 'boolean'
+  if (!numbersOk || !vectorsOk || !rotationOk || !scaleOk || !nameOk || !hiddenOk) {
     throw bad(`shape node "${id}" has an invalid parameter`)
   }
 
   const copy: Record<string, unknown> = { id, kind, position: node.position }
   for (const field of [...spec.numbers, ...spec.vectors]) copy[field] = node[field]
+  if (node.name) copy.name = node.name
+  if (node.hidden) copy.hidden = true
   if (node.rotation !== undefined) copy.rotation = node.rotation
   if (node.scale !== undefined) copy.scale = node.scale
 
-  if (kind === 'union' || kind === 'subtract' || kind === 'intersect') {
+  if (isBoolean(kind)) {
     if (!Array.isArray(node.children) || node.children.length === 0) {
       throw bad(`shape node "${id}" needs at least one child`)
     }
     copy.children = node.children.map((child) => parseTree(child, seenIds))
   } else if (kind === 'shell' || kind === 'round' || kind === 'mirror') {
     if (kind === 'mirror') {
-      if (!AXES.includes(node.axis as string)) throw bad(`shape node "${id}" has an invalid axis`)
+      if (!(AXES as readonly string[]).includes(node.axis as string)) {
+        throw bad(`shape node "${id}" has an invalid axis`)
+      }
       copy.axis = node.axis
     }
     copy.child = parseTree(node.child, seenIds)

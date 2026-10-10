@@ -1,4 +1,5 @@
 export * from './api'
 export * from './commands'
+export * from './shapes'
 export * from './text'
 export * from './types'

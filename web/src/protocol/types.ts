@@ -1,3 +1,5 @@
+import type { SdfTree } from './shapes'
+
 export const MODES = ['organic', 'machines'] as const
 export type Mode = (typeof MODES)[number]
 
@@ -11,19 +13,28 @@ export interface ObjectInfo {
   readonly id: string
   readonly name: string
   readonly mode: Mode
+  /** An Organic object's shape. Absent on Machines objects and on empty Organic ones. */
+  readonly sdf?: SdfTree
+}
+
+/** The selected object and, when it has a shape, one node of it (the root, to mean the whole). */
+export interface Selection {
+  readonly object: string
+  readonly node?: string
 }
 
 /** Everything the UI needs to draw itself. The engine sends a fresh snapshot on every change. */
 export interface EngineState {
   readonly mode: Mode
   readonly objects: readonly ObjectInfo[]
+  readonly selection: Selection | null
   readonly canUndo: boolean
   readonly canRedo: boolean
 }
 
 /** Null means the number is not available in this environment. */
 export interface EngineStats {
-  /** CPU time spent building and submitting the last frame. */
+  /** Time the last frame took, from its start until the GPU finished it. */
   readonly frameMs: number | null
   readonly jsHeapBytes: number | null
   readonly wasmHeapBytes: number

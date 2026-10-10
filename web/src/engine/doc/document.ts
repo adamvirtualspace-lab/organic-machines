@@ -1,5 +1,5 @@
 import type { Mode } from '../../protocol'
-import type { SdfTree } from '../organic/tree'
+import type { SdfTree } from '../../protocol'
 import { SCHEMA_VERSION } from './schema'
 
 export interface DocObject {
