@@ -8,17 +8,23 @@ function smoothMin(a: number, b: number, k: number): number {
   return Math.min(a, b) - h * h * k * 0.25
 }
 
+export interface Evaluator {
+  (x: number, y: number, z: number): number
+  /** The distance one graph node produced at the point last evaluated. */
+  nodeValue(index: number): number
+}
+
 /**
  * The CPU evaluator: returns a function giving the signed distance at a point.
  * It must agree with the shader built from the same graph (see conformance.json).
  */
-export function createEvaluator(graph: SdfGraph): (x: number, y: number, z: number) => number {
+export function createEvaluator(graph: SdfGraph): Evaluator {
   const { nodes, roots } = graph
   const P = Float64Array.from(graph.params)
   // Three slots per node: a point uses all of them, a distance only the first.
   const v = new Float64Array(nodes.length * 3)
 
-  return (x, y, z) => {
+  const evaluate = (x: number, y: number, z: number): number => {
     v[0] = x
     v[1] = y
     v[2] = z
@@ -159,4 +165,5 @@ export function createEvaluator(graph: SdfGraph): (x: number, y: number, z: numb
     for (const root of roots) distance = Math.min(distance, v[root.node * 3]!)
     return distance
   }
+  return Object.assign(evaluate, { nodeValue: (index: number) => v[index * 3]! })
 }

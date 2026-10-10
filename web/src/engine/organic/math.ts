@@ -25,6 +25,16 @@ export function quatFromEuler([x, y, z]: Vec3): Quat {
   ]
 }
 
+/** The rotation `b` followed by the rotation `a`. */
+export function multiply([ax, ay, az, aw]: Quat, [bx, by, bz, bw]: Quat): Quat {
+  return [
+    aw * bx + ax * bw + ay * bz - az * by,
+    aw * by - ax * bz + ay * bw + az * bx,
+    aw * bz + ax * by - ay * bx + az * bw,
+    aw * bw - ax * bx - ay * by - az * bz,
+  ]
+}
+
 export const conjugate = ([x, y, z, w]: Quat): Quat => [-x, -y, -z, w]
 
 export function rotate(v: Vec3, [qx, qy, qz, qw]: Quat): Vec3 {

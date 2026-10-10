@@ -55,6 +55,8 @@ export interface SdfGraph {
   params: number[]
   /** Offset of the sphere enclosing every root, laid out like a root's bound. */
   sceneBound: number
+  /** Which graph node holds each primitive's finished distance, for picking. Not read by shaders. */
+  leaves: { node: number; id: string }[]
 }
 
 /** Bounds are capped so shader arithmetic stays well inside 32-bit float range. */
@@ -72,6 +74,7 @@ export function compileScene(trees: readonly SdfTree[]): SdfGraph {
   const nodes: GraphNode[] = [{ op: 'point' }]
   const params: number[] = []
   const roots: GraphRoot[] = []
+  const leaves: SdfGraph['leaves'] = []
 
   /** Multi-value parameters never straddle a group of four, so the shader reads each from one vec4. */
   const alloc = (values: readonly number[]): number => {
@@ -108,6 +111,7 @@ export function compileScene(trees: readonly SdfTree[]): SdfGraph {
     const scale = tree.scale ?? 1
     const scaled = mul(bound.center, scale)
     const center = add(turn ? rotate(scaled, turn) : scaled, tree.position)
+    if (!('children' in tree) && !('child' in tree)) leaves.push({ node, id: tree.id })
     return { node, bound: { center, radius: bound.radius * scale } }
   }
 
@@ -209,7 +213,7 @@ export function compileScene(trees: readonly SdfTree[]): SdfGraph {
     scene = scene ? enclose(scene, bound) : bound
   }
   const sceneBound = alloc(boundParams(scene ?? { center: [0, 0, 0], radius: 0 }))
-  return { version: GRAPH_VERSION, nodes, roots, params, sceneBound }
+  return { version: GRAPH_VERSION, nodes, roots, params, sceneBound, leaves }
 }
 
 /** Two graphs with the same key differ only in parameter values, so they can share one shader. */

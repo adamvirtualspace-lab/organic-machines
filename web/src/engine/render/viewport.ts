@@ -1,13 +1,16 @@
 import * as THREE from 'three/webgpu'
-import type { LogMessage, ViewportHost, ViewportSupport } from '../../protocol'
-import type { Engine } from '../engine'
-import { compileScene, type SdfGraph } from '../organic/graph'
+import type { LogMessage, SdfTree, ViewportHost, ViewportSupport } from '../../protocol'
+import type { Engine, SceneState } from '../engine'
+import { placeNode } from '../organic/frames'
+import { visibleTree } from '../organic/tree'
 import { createAdaptiveScale } from './adaptiveScale'
 import { createAxisGizmo } from './axisGizmo'
 import { createCameraControls } from './cameraControls'
 import { createGrid } from './grid'
+import { createMoveGizmo } from './moveGizmo'
 import { createRaymarchPass, gpuIdle, type RaymarchQuality } from './raymarch'
 import { runSdfSelfTest } from './sdfSelfTest'
+import { attachShapeTools } from './shapeTools'
 
 const BACKGROUND = 0x17191d
 const HOME_POSITION = new THREE.Vector3(260, -340, 240) // mm, looking at the origin
@@ -49,8 +52,9 @@ async function checkSupport(): Promise<ViewportSupport> {
     return { ok: false, reason }
   }
   const adapter = await navigator.gpu.requestAdapter()
-  if (!adapter)
+  if (!adapter) {
     return { ok: false, reason: 'WebGPU is available, but no graphics adapter was found.' }
+  }
   return { ok: true }
 }
 
@@ -64,16 +68,30 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
 
   const scene = new THREE.Scene()
   const camera = new THREE.PerspectiveCamera(40, 1, 1, 10_000)
-  // Set up front so the matrices handed to the SDF pass are right from the first frame.
+  // Set up front so matrices read before the first render already use WebGPU's depth range.
   camera.coordinateSystem = THREE.WebGPUCoordinateSystem
   camera.up.set(0, 0, 1) // CAD convention: Z is up.
   camera.position.copy(HOME_POSITION)
 
   const grid = createGrid()
-  const gizmo = createAxisGizmo()
+  const axes = createAxisGizmo()
+  const mover = createMoveGizmo()
   const raymarch = createRaymarchPass(renderer, BACKGROUND)
-  scene.add(raymarch.composite, grid.object, gizmo.object)
+  scene.add(raymarch.composite, grid.object, axes.object, mover.object)
 
+  let width = 1
+  let height = 1
+
+  // Created before the camera controls so a press on a gizmo arrow is claimed first.
+  const tools = attachShapeTools({
+    canvas,
+    camera,
+    gizmo: mover,
+    size: () => ({ width, height }),
+    execute: (command) => void engine.execute(command),
+    setNavigation: (enabled) => (controls.enabled = enabled),
+    pickTargets: () => raymarch.pickTargets(),
+  })
   const navigation = createCameraControls(camera, canvas, (command) => {
     if (command === 'home') void engine.execute({ name: 'view.home', params: {} })
     else if (command === 'flip') void engine.execute({ name: 'view.flip', params: {} })
@@ -81,14 +99,14 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
   })
   const controls = navigation.orbit
 
-  let width = 1
-  let height = 1
-  let graph: SdfGraph | null = null
   let frameMs: number | null = null
   let frame = 0
   let moving = false
   let settleTimer = 0
+  let hasShapes = false
   const movingScale = createAdaptiveScale(MOVING_SCALE)
+  /** Hidden nodes are filtered out once per tree, so an unchanged object keeps the same identity. */
+  const drawn = new WeakMap<SdfTree, SdfTree | null>()
 
   // Render on demand: nothing is drawn while the view is idle, which saves battery and heat.
   const invalidate = () => {
@@ -100,10 +118,11 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
     camera.near = distance / 100
     camera.far = distance * 100
     camera.updateProjectionMatrix()
-    // The SDF pass and the gizmo read the camera before the renderer updates it.
+    // The gizmos read the camera before the renderer updates it.
     camera.updateMatrixWorld()
     grid.update(controls.target, distance)
-    gizmo.update(camera, width, height)
+    axes.update(camera, width, height)
+    mover.update(camera, height)
     raymarch.render(camera, width, height, quality)
     renderer.render(scene, camera)
   }
@@ -115,6 +134,10 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
     void gpuIdle(renderer).then(() => (frameMs = performance.now() - started))
   }
 
+  const onViewChange = () => {
+    raymarch.viewChanged()
+    invalidate()
+  }
   const onMoveStart = () => {
     clearTimeout(settleTimer)
     moving = true
@@ -133,12 +156,38 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO))
     renderer.setSize(width, height)
     camera.aspect = width / height
-    invalidate()
+    onViewChange()
   })
   resize.observe(container)
-  controls.addEventListener('change', invalidate)
+  controls.addEventListener('change', onViewChange)
   controls.addEventListener('start', onMoveStart)
   controls.addEventListener('end', onMoveEnd)
+
+  function sceneChanged({ doc, mode, selection }: SceneState): void {
+    const editing = mode === 'organic'
+    const objects = doc.objects.flatMap(({ id, sdf }) => {
+      if (!sdf) return []
+      if (!drawn.has(sdf)) drawn.set(sdf, visibleTree(sdf) ?? null)
+      const tree = drawn.get(sdf)
+      return tree ? [{ id, tree }] : []
+    })
+    hasShapes = objects.length > 0
+    raymarch.setObjects(objects, editing ? (selection?.object ?? null) : null)
+    // Organic shapes stay visible in Machines mode, but dimmed to show they are locked.
+    raymarch.setDimmed(!editing)
+
+    const selected = selection && doc.objects.find((object) => object.id === selection.object)
+    const node = selected?.sdf && selection?.node ? selection.node : undefined
+    const placement = (editing && node && placeNode(selected!.sdf!, node)) || null
+    mover.setPlacement(placement)
+    tools.setTarget({
+      selection,
+      placement,
+      value: node ? findPosition(selected!.sdf!, node) : null,
+      enabled: editing,
+    })
+    invalidate()
+  }
 
   /** Times frames while circling the scene, waiting for the GPU each time so vsync does not cap the result. */
   async function bench(): Promise<LogMessage[]> {
@@ -147,6 +196,7 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
     const offset = new THREE.Vector3()
     const ratio = renderer.getPixelRatio()
     const pixels = `${Math.round(width * ratio)}×${Math.round(height * ratio)} px`
+    const { objects, nodes, params } = raymarch.summary()
     const runs: [string, RaymarchQuality][] = [
       ['Full quality', FULL_QUALITY],
       ['While moving', { scale: MOVING_SCALE.start, maxSteps: MOVING_STEPS }],
@@ -154,9 +204,7 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
     const messages: LogMessage[] = [
       {
         kind: 'info',
-        text: graph
-          ? `Scene: ${graph.roots.length} objects, ${graph.nodes.length} graph nodes, ${graph.params.length} parameters, canvas ${pixels}`
-          : `Scene: no Organic shapes, canvas ${pixels}`,
+        text: `Scene: ${objects} objects, ${nodes} graph nodes, ${params} parameters, canvas ${pixels}`,
       },
     ]
     for (const [label, quality] of runs) {
@@ -166,6 +214,7 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
         offset.applyAxisAngle(up, THREE.MathUtils.degToRad(3))
         camera.position.copy(controls.target).add(offset)
         camera.lookAt(controls.target)
+        raymarch.viewChanged()
         const started = performance.now()
         drawFrame(quality)
         await gpuIdle(renderer)
@@ -182,12 +231,12 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
     if (raymarch.lastBuildMs !== null) {
       messages.push({
         kind: 'info',
-        text: `Shader built ${raymarch.builds} time(s); the last build took ${raymarch.lastBuildMs.toFixed(0)} ms to its first frame`,
+        text: `Shaders built ${raymarch.builds} time(s); the last build took ${raymarch.lastBuildMs.toFixed(0)} ms to its first frame`,
       })
     }
     camera.position.copy(savedPosition)
     controls.update()
-    invalidate()
+    onViewChange()
     return messages
   }
 
@@ -196,25 +245,18 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
       camera.position.copy(HOME_POSITION)
       controls.target.set(0, 0, 0)
       controls.update()
-      invalidate()
+      onViewChange()
     },
     setView: navigation.setView,
     flipView: navigation.flipView,
-    sceneChanged({ doc, mode }) {
-      // Organic shapes stay visible in Machines mode, but dimmed to show they are locked.
-      raymarch.setDimmed(mode !== 'organic')
-      const trees = doc.objects.flatMap((object) => (object.sdf ? [object.sdf] : []))
-      graph = trees.length > 0 ? compileScene(trees) : null
-      raymarch.setGraph(graph)
-      invalidate()
-    },
+    sceneChanged,
     bench,
     selfTest: () => runSdfSelfTest(renderer),
     stats: () => ({
       frameMs,
       gpuBytesEstimate:
         estimateGpuBytes(scene, width, height, renderer.getPixelRatio()) + raymarch.gpuBytes,
-      sdfScale: graph ? (moving ? movingScale.value : FULL_QUALITY.scale) : null,
+      sdfScale: hasShapes ? (moving ? movingScale.value : FULL_QUALITY.scale) : null,
       shaderBuilds: raymarch.builds,
       shaderBuildMs: raymarch.lastBuildMs,
     }),
@@ -225,11 +267,22 @@ async function start(engine: Engine, container: HTMLElement): Promise<() => void
     cancelAnimationFrame(frame)
     clearTimeout(settleTimer)
     resize.disconnect()
+    tools.dispose()
     navigation.dispose()
     raymarch.dispose()
     renderer.dispose()
     canvas.remove()
   }
+}
+
+function findPosition(tree: SdfTree, id: string): readonly number[] | null {
+  if (tree.id === id) return tree.position
+  const children = 'children' in tree ? tree.children : 'child' in tree ? [tree.child] : []
+  for (const child of children) {
+    const found = findPosition(child, id)
+    if (found) return found
+  }
+  return null
 }
 
 /**
